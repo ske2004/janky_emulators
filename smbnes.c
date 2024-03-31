@@ -42,7 +42,7 @@ const char *strmap[] = {
 // 0xFF - Invalid addressing mode
 // Addressing modes in this order:
 //      Acc  Abs  AbX  AbY  Imm  Imp  Ind  Xnd  InY  Rel  Zpg  ZpX  ZpY
-const uint8_t instrtbl[] = {
+const uint8_t opctbl[] = {
 /*ADC*/ 0xFF,0x6D,0x7D,0x79,0x69,0xFF,0xFF,0x61,0x71,0xFF,0x65,0x75,0xFF,
 /*AND*/ 0xFF,0x2D,0x3D,0x39,0x29,0xFF,0xFF,0x21,0x31,0xFF,0x25,0x35,0xFF,
 /*ASL*/ 0x0A,0x0E,0x1E,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0x06,0x16,0xFF,
@@ -101,6 +101,9 @@ const uint8_t instrtbl[] = {
 /*TYA*/ 0xFF,0xFF,0xFF,0xFF,0xFF,0x98,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
 };
 
+uint8_t instrtbl[256];
+uint8_t addrtbl[256];
+
 uint8_t *data;
 void p_acc() { printf("A"); }
 void p_abs() { printf("$%04X", ((uint16_t*)data)[0]); data += 2; }
@@ -137,22 +140,27 @@ int main(int argc, char **argv) {
 
         data = mem;
 
-        while (data-mem < fsize) {
-                bool found = false;
-                for (int j = 0; j < ADDR_MODE_COUNT*_ICOUNT; j++) {
-                        if (instrtbl[j] == data[0]) {
-                                printf("%s ", strmap[j/13]);
-                                data += 1;
-                                printers[j%13]();
-                                printf("\n");
-                                found = true;
-                                break;
-                        }
+        memset(instrtbl, 0xFF, sizeof(instrtbl));
+        memset(addrtbl, 0xFF, sizeof(addrtbl));
+        for (int i = 0; i < ADDR_MODE_COUNT*_ICOUNT; i++) {
+                if (opctbl[i] != 0xFF) {
+                        instrtbl[opctbl[i]] = i/ADDR_MODE_COUNT;
+                        addrtbl[opctbl[i]] = i%ADDR_MODE_COUNT;
                 }
+        }
 
-                if (!found) {
-                        printf("Invalid opcode: $%02x\n", data[0]);
+        while (data-mem < fsize) {
+                uint8_t opc = *data++;
+                if (instrtbl[opc] == 0xFF) {
+                        printf("Invalid instruction: $%X\n", opc);
                         break;
                 }
+                if (addrtbl[opc] == 0xFF) {
+                        printf("Invalid addressing mode for %s\n", strmap[instrtbl[opc]]);
+                        break;
+                }
+                printf("%s ", strmap[instrtbl[opc]]);
+                printers[addrtbl[opc]]();
+                printf("\n");
         }
 }
