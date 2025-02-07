@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
-#include <vcruntime.h>
 
 #define ADDR_MODE_COUNT 13
 
