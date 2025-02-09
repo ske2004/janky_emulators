@@ -1,0 +1,2 @@
+-I
+bin/SDL3-x64/include

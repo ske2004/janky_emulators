@@ -533,6 +533,18 @@ static void do_cmp(struct ricoh_state *cpu, int8_t reg, int8_t operand)
     do_sub_carry(cpu, reg, operand, false, false);
 }
 
+void ricoh_do_interrupt(
+    struct ricoh_state *cpu,
+    struct ricoh_mem_interface *mem,
+    uint16_t newpc
+)
+{
+    push16(cpu, mem, cpu->pc);
+    push8(cpu, mem, cpu->flags | (1 << FLAG_BRK) | (1 << FLAG_BI5));
+    cpu->pc = newpc;
+    cpu->cycles += 7;
+}
+
 void ricoh_run_instr(
     struct ricoh_state *cpu,
     struct instr_decoded instr,
