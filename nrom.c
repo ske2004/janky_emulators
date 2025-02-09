@@ -128,7 +128,7 @@ struct nrom_frame_result nrom_frame(struct nrom *nrom)
 
     uint32_t start = nrom->cpu.cycles;
 
-    while ((nrom->cpu.cycles-start) < 50000)
+    while ((nrom->cpu.cycles-start) < 60000)
     {
         uint16_t start = nrom->cpu.pc;
         struct instr_decoded decoded = ricoh_decode_instr(&nrom->decoder, &mem, nrom->cpu.pc);
@@ -161,7 +161,7 @@ struct nrom_frame_result nrom_frame(struct nrom *nrom)
     }
         
     struct nrom_frame_result result = { 0 };
-    ppu_get_buf(&nrom->ppu, result.screen);
+    ppu_get_buf(&nrom->ppu, &mem, result.screen);
 
     return result;
 }

@@ -34,9 +34,6 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-
-    printf("Listing complete.\n");
-
     SDL_Window *window;                    // Declare a pointer
     SDL_Renderer *renderer;
     bool done = false;
@@ -95,8 +92,6 @@ int main(int argc, char* argv[]) {
         SDL_RenderTexture(renderer, sdltexture, &src, &dst);
         SDL_RenderPresent(renderer);
         SDL_DestroyTexture(sdltexture);
-
-        // Do game logic, present a frame, etc.
     }
 
     // Close and destroy the window
