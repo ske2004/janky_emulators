@@ -1,7 +1,8 @@
 #include "ricoh.c"
 #include <assert.h>
 
-enum ppu_ir {
+enum ppu_ir
+{
     PPUIR_CTRL,
     PPUIR_MASK,
     PPUIR_STATUS,
@@ -14,7 +15,8 @@ enum ppu_ir {
     PPUIR_COUNT
 };
 
-enum ppu_io {
+enum ppu_io
+{
     PPUIO_CTRL,
     PPUIO_MASK,
     PPUIO_STATUS,
@@ -29,14 +31,20 @@ enum ppu_io {
 
 struct ppu
 {
+    uint8_t oam[256];
     uint8_t vram[1<<14];
     uint8_t extlatch;
     uint8_t regs[PPUIR_COUNT];
+    uint16_t beam;
+    uint16_t scanline;
+    uint32_t ticks;
+    uint8_t screen[256*240];
 };
 
 struct ppu ppu_mk()
 {
-    return (struct ppu){ 0 };
+    struct ppu ppu = { 0 };
+    return ppu;
 }
 
 void ppu_write_chr(struct ppu *ppu, uint8_t *chr, uint32_t chr_size)
@@ -139,74 +147,134 @@ bool ppu_nmi_enabled(struct ppu *ppu)
     return (ppu->regs[PPUIR_CTRL] & 0x80) > 0;
 }
 
-void ppu_get_buf(struct ppu *ppu, struct ricoh_mem_interface *mem, uint8_t screen[240*256])
+void ppu_write_oam(struct ppu *ppu, uint8_t *oamsrc)
 {
-    for (int x = 0; x < 256/8; x++)
+    memcpy(ppu->oam, oamsrc, 256);
+}
+
+uint8_t ppu_get_pixel(struct ppu *ppu, int x, int y)
+{
+    uint8_t pixel = 0;
+    bool opaque = false;
+
+    // Get tile pixel
     {
-        for (int y = 0; y < 240/8; y++)
-        {
-            uint16_t idx = x+y*(256/8);
-            uint16_t tile = ppu->vram[0x2000+idx];
+        int tile_x = x/8;
+        int tile_y = y/8;
 
-            uint8_t octx =  (x/4);
-            uint8_t octy =  (y/4);
-            uint8_t quadx = (x/2)&1;
-            uint8_t quady = (y/2)&1;
-            uint8_t palidx = (ppu->vram[0x23C0+octx+octy*8]>>((quadx|(1<<quady))<<1))&3;
+        uint16_t idx = tile_x+tile_y*(256/8);
+        uint16_t tile = ppu->vram[0x2000+idx];
 
-            if (ppu->regs[PPUIR_CTRL] & (1<<4)) tile += 0x100;
+        uint8_t octx =  (tile_x/4);
+        uint8_t octy =  (tile_y/4);
+        uint8_t quadx = (tile_x/2)&1;
+        uint8_t quady = (tile_y/2)&1;
+        uint8_t palidx = (ppu->vram[0x23C0+octx+octy*8]>>((quadx|(1<<quady))<<1))&3;
 
-            for (int tx = 0; tx < 8; tx++)
-            {
-                for (int ty = 0; ty < 8; ty++)
-                {
-                    uint8_t lo = (ppu->vram[(uint16_t)tile*16+ty]>>(7-tx))&1;
-                    uint8_t hi = (ppu->vram[(uint16_t)tile*16+8+ty]>>(7-tx))&1;
-                    uint8_t palcoloridx = lo | (hi << 1);
-                    uint8_t palcolor = ppu->vram[0x3F00+palidx*4+palcoloridx];
-                    if (palcoloridx == 0) {
-                        palcolor = ppu->vram[0x3F10];
-                    }
+        if (ppu->regs[PPUIR_CTRL] & (1<<4)) tile += 0x100;
 
+        int tx = x%8;
+        int ty = y%8;
 
-                    int _x = x*8+tx;
-                    int _y = y*8+ty;
-                    screen[_x+_y*256] = palcolor;
-                }
-            }
+        uint8_t lo = (ppu->vram[(uint16_t)tile*16+ty]>>(7-tx))&1;
+        uint8_t hi = (ppu->vram[(uint16_t)tile*16+8+ty]>>(7-tx))&1;
+        uint8_t palcoloridx = lo | (hi << 1);
+        uint8_t palcolor = ppu->vram[0x3F00+palidx*4+palcoloridx];
+        if (palcoloridx == 0) {
+            palcolor = ppu->vram[0x3F10];
         }
+
+        opaque = palcoloridx != 0;
+
+        pixel = palcolor;
     }
-    
-    for (int o = 0; o < 256/4; o++)
+
+
+    for (int o = 0; o < 64; o++)
     {
-        uint8_t y     = mem->get(mem->instance, o*4+ppu->regs[PPUIR_OAMDMA]*256+0)-1;
-        uint16_t tile = mem->get(mem->instance, o*4+ppu->regs[PPUIR_OAMDMA]*256+1);
-        uint8_t pal   = mem->get(mem->instance, o*4+ppu->regs[PPUIR_OAMDMA]*256+2);
-        uint8_t x     = mem->get(mem->instance, o*4+ppu->regs[PPUIR_OAMDMA]*256+3);
-        
-        printf("%d %d\n", x, y);
+        uint8_t oy    = ppu->oam[o*4+0];
+        uint16_t tile = ppu->oam[o*4+1];
+        uint8_t pal   = ppu->oam[o*4+2];
+        uint8_t ox    = ppu->oam[o*4+3];
+
+        if (oy == 0) continue;
+
+        if (x-ox >= 8 || x-ox < 0 || y-oy >= 8 || y-oy < 0)
+        {
+            continue;
+        }
+
+        int tx = x-ox;
+        int ty = y-oy;
 
         if (ppu->regs[PPUIR_CTRL] & (1<<3)) tile += 0x100;
-
         uint8_t palidx = pal&3;
 
-        for (int tx = 0; tx < 8; tx++)
+        uint8_t lo = (ppu->vram[tile*16+ty]>>(7-tx))&1;
+        uint8_t hi = (ppu->vram[tile*16+8+ty]>>(7-tx))&1;
+        uint8_t palcoloridx = lo | (hi << 1);
+        uint8_t palcolor = ppu->vram[0x3F10+palidx*4+palcoloridx];
+     
+        if (palcoloridx == 0) 
         {
-            for (int ty = 0; ty < 8; ty++)
-            {
-                uint8_t lo = (ppu->vram[(uint16_t)tile*16+ty]>>(7-tx))&1;
-                uint8_t hi = (ppu->vram[(uint16_t)tile*16+8+ty]>>(7-tx))&1;
-                uint8_t palcoloridx = lo | (hi << 1);
-                uint8_t palcolor = ppu->vram[0x3F10+palidx*4+palcoloridx];
-                
-                if (palcoloridx == 0) {
-                    continue;
-                }
+            continue;
+        }
 
-                int _x = x+tx;
-                int _y = y+ty;
-                screen[_x+_y*256] = palcolor;
-            }
+        if (opaque && o == 0)
+        {
+            ppu_write(ppu, PPUIO_STATUS, ppu_read(ppu, PPUIO_STATUS)|(1<<6));
+        }
+        
+        pixel = palcolor;
+    }
+
+    return pixel;
+}
+
+bool ppu_cycle(struct ppu *ppu, struct ricoh_mem_interface *mem)
+{
+    bool nmi_occured = false;
+
+    ppu->ticks += 1;
+
+    if (ppu->beam > 340)
+    {
+        ppu->scanline += 1;
+        ppu->beam = 0;
+    }
+    
+    if (ppu->scanline < 240) 
+    {
+        if (ppu->beam < 256)
+        {
+            int x = ppu->beam;
+            int y = ppu->scanline;
+
+            uint8_t pixel = ppu_get_pixel(ppu, x, y);
+
+            ppu->screen[x+y*256] = pixel;
         }
     }
+    else if (ppu->scanline == 240)
+    {
+        if (ppu->beam == 0)
+        {
+            ppu_vblank(ppu);
+            nmi_occured = true;
+        }
+    }
+    else if (ppu->scanline > 240 && ppu->scanline <= 260)
+    {
+        // vblank
+    }
+    else
+    {
+        ppu->scanline = 0;
+        ppu->beam = -1;
+        ppu_write(ppu, PPUIO_STATUS, ppu_read(ppu, PPUIO_STATUS)&~(1<<6));
+    }
+
+    ppu->beam += 1;
+
+    return nmi_occured;
 }

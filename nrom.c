@@ -32,7 +32,10 @@ static void _nrom_mem_write(void *mem, uint16_t addr, uint8_t data)
         case 0x2005: ppu_write(&nrom->ppu, PPUIO_SCROLL, data); break;
         case 0x2006: ppu_write(&nrom->ppu, PPUIO_ADDR, data); break;
         case 0x2007: ppu_write(&nrom->ppu, PPUIO_DATA, data); break;
-        case 0x4014: ppu_write(&nrom->ppu, PPUIO_OAMDMA, data); break;
+        case 0x4014: // OAMDMA
+            ppu_write_oam(&nrom->ppu, nrom->memory + (((uint16_t)data)<<8));
+            nrom->cpu.cycles += nrom->cpu.cycles&2 + 513;
+            break;
         default:
             if (nrom->prgsize == 1 && addr >= 0xC000) addr -= 0x4000;
             nrom->memory[addr] = data;
@@ -128,40 +131,51 @@ struct nrom_frame_result nrom_frame(struct nrom *nrom)
 
     uint32_t start = nrom->cpu.cycles;
 
-    while ((nrom->cpu.cycles-start) < 60000)
+    while (true)
     {
         uint16_t start = nrom->cpu.pc;
         struct instr_decoded decoded = ricoh_decode_instr(&nrom->decoder, &mem, nrom->cpu.pc);
         
-        // char buf[1024] = { 0 };
-        // ricoh_format_decoded_instr(buf, decoded);
+        if (nrom->cpu.cycles*3 < nrom->ppu.ticks)
+        {
+            // char buf[1024] = { 0 };
+            // ricoh_format_decoded_instr(buf, decoded);
 
-        // printf("%04X  ", nrom->cpu.pc);
-        // switch (decoded.size)
-        // {
-        //     case 1: printf("%02X        ", mem.get(mem.instance, start)); break;
-        //     case 2: printf("%02X %02X     ", mem.get(mem.instance, start), mem.get(mem.instance, start+1)); break;
-        //     case 3: printf("%02X %02X %02X  ", mem.get(mem.instance, start), mem.get(mem.instance, start+1), mem.get(mem.instance, start+2)); break;
-        // }
+            // printf("%04X  ", nrom->cpu.pc);
+            // switch (decoded.size)
+            // {
+            //     case 1: printf("%02X        ", mem.get(mem.instance, start)); break;
+            //     case 2: printf("%02X %02X     ", mem.get(mem.instance, start), mem.get(mem.instance, start+1)); break;
+            //     case 3: printf("%02X %02X %02X  ", mem.get(mem.instance, start), mem.get(mem.instance, start+1), mem.get(mem.instance, start+2)); break;
+            // }
 
-        // printf("%s", buf);
-        // for (size_t i = 0; i < 32-strlen(buf); i++)
-        // {
-        //     printf(" ");
-        // }
-        // printf("A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%d\n", nrom->cpu.a,nrom-> cpu.x, nrom->cpu.y, nrom->cpu.flags, nrom->cpu.sp, nrom->cpu.cycles);
+            // printf("%s", buf);
+            // for (size_t i = 0; i < 32-strlen(buf); i++)
+            // {
+            //     printf(" ");
+            // }
+            // printf("A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%d\n", nrom->cpu.a,nrom-> cpu.x, nrom->cpu.y, nrom->cpu.flags, nrom->cpu.sp, nrom->cpu.cycles);
 
-        ricoh_run_instr(&nrom->cpu, decoded, &mem);
+            ricoh_run_instr(&nrom->cpu, decoded, &mem);
+        }
+        else
+        {
+            bool nmi_occured = ppu_cycle(&nrom->ppu, &mem);
+
+            if (nmi_occured)
+            {
+                if (ppu_nmi_enabled(&nrom->ppu))
+                {
+                    ricoh_do_interrupt(&nrom->cpu, &mem, nrom_get_vector(nrom, VEC_NMI));
+                }
+                break;
+            }
+        }
     }
 
-    ppu_vblank(&nrom->ppu);
-    if (ppu_nmi_enabled(&nrom->ppu))
-    {
-        ricoh_do_interrupt(&nrom->cpu, &mem, nrom_get_vector(nrom, VEC_NMI));
-    }
-        
     struct nrom_frame_result result = { 0 };
-    ppu_get_buf(&nrom->ppu, &mem, result.screen);
+
+    memcpy(result.screen, nrom->ppu.screen, sizeof result.screen);
 
     return result;
 }
