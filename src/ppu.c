@@ -148,11 +148,12 @@ struct ppu_nametable_result ppu_read_nametable(struct ppu *ppu, uint8_t x, uint8
         y -= 30;
     }
 
-    uint8_t octx =  (x/4);
-    uint8_t octy =  (y/4);
-    uint8_t quadx = (x/2)&1;
-    uint8_t quady = (y/2)&1;
-    uint8_t palidx = (ppu->vram[addr+0x3C0+octx+octy*8]>>((quadx|(1<<quady))<<1))&3;
+    uint8_t octx =  (x>>2);
+    uint8_t octy =  (y>>2);
+    uint8_t quadx = (x>>1)&1;
+    uint8_t quady = (y>>1)&1;
+    uint8_t q = (quadx|(1<<quady))*2;
+    uint8_t palidx = (ppu->vram[addr+0x3C0+octx+octy*8]>>q)&3;
 
     return (struct ppu_nametable_result) {
         ppu->vram[addr + x + y * 32],

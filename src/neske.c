@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include "SDL3/SDL_keycode.h"
 #include "SDL3/SDL_rect.h"
 #include "SDL3/SDL_render.h"
 #include "SDL3/SDL_surface.h"
@@ -158,6 +159,8 @@ int main(int argc, char* argv[]) {
 
     SDL_SetRenderScale(renderer, 2, 2);
 
+    struct controller_state controller = { 0 };
+
     while (!done) {
         struct nrom_frame_result result = nrom_frame(&nrom);
 
@@ -171,15 +174,28 @@ int main(int argc, char* argv[]) {
         SDL_Texture *sdltexture = SDL_CreateTextureFromSurface(renderer, surface);
         SDL_SetTextureScaleMode(sdltexture, SDL_SCALEMODE_NEAREST);
 
-
         SDL_Event event;
 
         while (SDL_PollEvent(&event)) {
-            if (event.type)
-            if (event.type == SDL_EVENT_QUIT) {
+            switch (event.type)
+            {
+            case SDL_EVENT_QUIT:
                 done = true;
+                break;
+            case SDL_EVENT_KEY_DOWN:
+            case SDL_EVENT_KEY_UP:
+                if (event.key.key == SDLK_X) controller.btns[BTN_A] = event.type == SDL_EVENT_KEY_DOWN;
+                if (event.key.key == SDLK_Z) controller.btns[BTN_B] = event.type == SDL_EVENT_KEY_DOWN;
+                if (event.key.key == SDLK_RETURN) controller.btns[BTN_START] = event.type == SDL_EVENT_KEY_DOWN;
+                if (event.key.key == SDLK_TAB) controller.btns[BTN_SELECT] = event.type == SDL_EVENT_KEY_DOWN;
+                if (event.key.key == SDLK_UP) controller.btns[BTN_UP] = event.type == SDL_EVENT_KEY_DOWN;
+                if (event.key.key == SDLK_DOWN) controller.btns[BTN_DOWN] = event.type == SDL_EVENT_KEY_DOWN;
+                if (event.key.key == SDLK_LEFT) controller.btns[BTN_LEFT] = event.type == SDL_EVENT_KEY_DOWN;
+                if (event.key.key == SDLK_RIGHT) controller.btns[BTN_RIGHT] = event.type == SDL_EVENT_KEY_DOWN;
+                nrom_update_controller(&nrom, controller);
+                break;
             }
-        }   
+        }
 
         SDL_FRect screen = {0, 0, 512, 360};
         SDL_SetRenderDrawColor(renderer, 0, 0, 127, 255);

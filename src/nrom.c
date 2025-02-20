@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <string.h>
+#include <stdio.h>
 #include "neske.h"
 
 static void _nrom_mem_write(void *mem, uint16_t addr, uint8_t data)
@@ -19,11 +20,22 @@ static void _nrom_mem_write(void *mem, uint16_t addr, uint8_t data)
             ppu_write_oam(&nrom->ppu, nrom->memory + (((uint16_t)data)<<8));
             nrom->cpu.cycles += nrom->cpu.cycles&2 + 513;
             break;
+        case 0x4016:
+            if (data&1)
+            {
+                nrom->controller_strobe = 0;
+            }
+            break;
         default:
             if (nrom->prgsize == 1 && addr >= 0xC000) addr -= 0x4000;
             nrom->memory[addr] = data;
             break;
     }
+}
+
+void nrom_update_controller(struct nrom *nrom, struct controller_state cs)
+{
+    nrom->controller = cs;
 }
 
 static uint8_t _nrom_mem_read(void *mem, uint16_t addr)
@@ -35,6 +47,21 @@ static uint8_t _nrom_mem_read(void *mem, uint16_t addr)
         case 0x2002: return ppu_read(&nrom->ppu, PPUIO_STATUS);
         case 0x2004: return ppu_read(&nrom->ppu, PPUIO_OAMDATA);
         case 0x2007: return ppu_read(&nrom->ppu, PPUIO_DATA);
+        case 0x4017:
+            return 0;
+        case 0x4016:
+
+            if (nrom->controller_strobe != 8)
+            {
+                return nrom->controller.btns[nrom->controller_strobe++];
+            }
+            else
+            {
+                printf("STROBE: %d\n", nrom->controller_strobe);
+                return 1;
+            }
+
+            break;
         default: 
             if (nrom->prgsize == 1 && addr >= 0xC000) addr -= 0x4000;
             return nrom->memory[addr];
@@ -65,6 +92,7 @@ uint8_t nrom_load(uint8_t *ines, struct nrom *out)
     *out = (struct nrom){ 0 };
     out->prgsize = ines[4];
     out->chrsize = ines[5];
+    out->controller_strobe = 8;
 
     uint32_t prg_size = out->prgsize*(1<<14);
 

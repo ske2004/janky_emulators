@@ -171,11 +171,31 @@ enum vector
     VEC_IRQ
 };
 
+enum controller_btn
+{
+    BTN_A,
+    BTN_B,
+    BTN_SELECT,
+    BTN_START,
+    BTN_UP,
+    BTN_DOWN,
+    BTN_LEFT,
+    BTN_RIGHT,
+};
+
+struct controller_state
+{
+    uint8_t btns[8];
+};
+
 struct nrom
 {
     struct ricoh_decoder decoder;
     struct ricoh_state cpu;
     struct ppu ppu;
+    
+    struct controller_state controller;
+    uint8_t controller_strobe;
 
     uint8_t prgsize;
     uint8_t chrsize;
@@ -188,6 +208,7 @@ struct nrom_frame_result
 };
 
 uint16_t nrom_get_vector(struct nrom *nrom, enum vector vec);
+void nrom_update_controller(struct nrom *nrom, struct controller_state cs);
 uint8_t nrom_load(uint8_t *ines, struct nrom *out);
 struct ricoh_mem_interface nrom_get_memory_interface(struct nrom *nrom);
 struct nrom_frame_result nrom_frame(struct nrom *nrom);
