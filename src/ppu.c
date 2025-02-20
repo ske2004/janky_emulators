@@ -211,7 +211,7 @@ uint8_t ppu_get_pixel(struct ppu *ppu, int x, int y)
     if (ppu->regs[PPUIR_MASK]&(1<<4))
         for (int o = 0; o < 64; o++)
         {
-            uint8_t oy    = ppu->oam[o*4+0];
+            uint8_t oy    = ppu->oam[o*4+0]+1;
             uint16_t tile = ppu->oam[o*4+1];
             uint8_t attr   = ppu->oam[o*4+2];
             uint8_t ox    = ppu->oam[o*4+3];
