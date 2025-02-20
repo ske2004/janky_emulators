@@ -1,66 +1,7 @@
+#include "neske.h"
 #include <assert.h>
-#include <stdbool.h>
 #include <stdio.h>
-#include <stdint.h>
 #include <string.h>
-
-#define ADDR_MODE_COUNT 13
-
-enum instr
-{
-    ADC, AND, ASL,
-    BCC, BCS, BEQ, BIT, BMI, BNE, BPL, BRK, BVC, BVS,
-    CLC, CLD, CLI, CLV, CMP, CPX, CPY,
-    DEC, DEX, DEY,
-    EOR,
-    INC, INX, INY,
-    JMP, JSR,
-    LDA, LDX, LDY, LSR,
-    NOP,
-    ORA,
-    PHA, PHP, PLA, PLP,
-    ROL, ROR, RTI, RTS,
-    SBC, SEC, SED, SEI, STA, STX, STY,
-    TAX, TAY, TSX, TXA, TXS, TYA, _ICOUNT
-};
-
-enum addr_mode
-{
-    AM_ACC, AM_ABS, AM_ABX, AM_ABY, AM_IMM, AM_IMP, AM_IND, AM_XND, AM_INY, AM_REL, AM_ZPG, AM_ZPX, AM_ZPY
-};
-
-enum flags
-{
-    FLAG_CAR, FLAG_ZER, FLAG_INT, FLAG_DEC, FLAG_BRK, FLAG_BI5, FLAG_OFW, FLAG_NEG
-};
-
-struct instr_decoded
-{
-    enum instr id;
-    enum addr_mode addr_mode;
-    uint8_t operand[2];
-    size_t size;
-};
-
-struct ricoh_decoder
-{
-    uint8_t itbl[256];
-    uint8_t atbl[256];
-};
-
-struct ricoh_state
-{
-    uint16_t pc;
-    uint8_t a, x, y, sp, flags;
-    uint32_t cycles;
-};
-
-struct ricoh_mem_interface
-{
-    void *instance;
-    uint8_t (*get)(void *instance, uint16_t addr);
-    void (*set)(void *instance, uint16_t addr, uint8_t byte);
-};
 
 const char *ricoh_instr_to_str[] =
 {
@@ -759,7 +700,3 @@ void ricoh_run_instr(
             break;
     }
 }
-
-#undef REG_A
-#undef REG_X
-#undef REG_Y

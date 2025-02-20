@@ -1,6 +1,6 @@
 @echo off
 if not exist bin mkdir bin
-cl neske.c /fsanitize=address /link /DEBUG
+cl src\jumbo.c /fsanitize=address /link /DEBUG /Feneske.exe
 move neske.pdb bin
 move neske.exe bin
 del *.obj

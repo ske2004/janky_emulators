@@ -2,9 +2,9 @@
 #include "SDL3/SDL_rect.h"
 #include "SDL3/SDL_render.h"
 #include "SDL3/SDL_surface.h"
-#include "nrom.c"
 #include <SDL3/SDL.h>
 #include "font8x8.h"
+#include "neske.h"
 
 uint32_t pallete[] = {
     0x626262ff, 0x001fb2ff, 0x2404c8ff, 0x5200b2ff, 0x730076ff, 0x800024ff, 0x730b00ff, 0x522800ff, 0x244400ff, 0x005700ff, 0x005c00ff, 0x005324ff, 0x003c76ff, 0x000000ff, 0x000000ff, 0x000000ff, 0xabababff, 0x0d57ffff, 0x4b30ffff, 0x8a13ffff, 0xbc08d6ff, 0xd21269ff, 0xc72e00ff, 0x9d5400ff, 0x607b00ff, 0x209800ff, 0x00a300ff, 0x009942ff, 0x007db4ff, 0x000000ff, 0x000000ff, 0x000000ff, 0xffffffff, 0x53aeffff, 0x9085ffff, 0xd365ffff, 0xff57ffff, 0xff5dcfff, 0xff7757ff, 0xfa9e00ff, 0xbdc700ff, 0x7ae700ff, 0x43f611ff, 0x26ef7eff, 0x2cd5f6ff, 0x4e4e4eff, 0x000000ff, 0x000000ff, 0xffffffff, 0xb6e1ffff, 0xced1ffff, 0xe9c3ffff, 0xffbcffff, 0xffbdf4ff, 0xffc6c3ff, 0xffd59aff, 0xe9e681ff, 0xcef481ff, 0xb6fb9aff, 0xa9fac3ff, 0xa9f0f4ff, 0xb8b8b8ff, 0x000000ff, 0x000000ff
@@ -128,7 +128,7 @@ int main(int argc, char* argv[]) {
         "neske",                           // window title
         256*4,                               // width, in pixels
         240*3,                               // height, in pixels
-        SDL_WINDOW_OPENGL // flags - see below
+        SDL_WINDOW_OPENGL  // flags - see below
     );
 
     if (window == NULL)
@@ -138,6 +138,7 @@ int main(int argc, char* argv[]) {
     }
 
     renderer = SDL_CreateRenderer(window, NULL);
+    SDL_SetRenderVSync(renderer, 1);
 
     if (renderer == NULL)
     {
@@ -148,7 +149,13 @@ int main(int argc, char* argv[]) {
     uint32_t texture[240*256];
     SDL_Surface *surface = SDL_CreateSurface(256, 240, SDL_PIXELFORMAT_RGBA8888);
     struct ui_draw uidraw = ui_draw_mk(renderer);
-    
+    struct imap *imap = imap_mk();
+
+    struct ricoh_mem_interface mem = nrom_get_memory_interface(&nrom);
+    imap_populate(imap, &nrom.decoder, &mem, nrom_get_vector(&nrom, VEC_NMI));
+    imap_populate(imap, &nrom.decoder, &mem, nrom_get_vector(&nrom, VEC_RESET));
+    imap_populate(imap, &nrom.decoder, &mem, nrom_get_vector(&nrom, VEC_IRQ));
+
     SDL_SetRenderScale(renderer, 2, 2);
 
     while (!done) {
@@ -183,8 +190,32 @@ int main(int argc, char* argv[]) {
         SDL_FRect dst = {0, 0, 256, 240};
         SDL_RenderTexture(renderer, sdltexture, &src, &dst);
 
-        ui_draw_item(&uidraw, (SDL_FRect){10, 10, 200, 200}, true);
-        ui_draw_text(&uidraw, "The quick brown fox jumps over the lazy bog.", (SDL_Point){100, 4}, 1);
+        // ui_draw_item(&uidraw, (SDL_FRect){10, 10, 200, 200}, true);
+        struct print_instr *instrs[10];
+        imap_list_range(imap, nrom.cpu.pc, instrs, -5, 4);
+
+        ui_draw_text(&uidraw,  "CPU --------------", (SDL_Point){256, 0}, 1);
+
+        for (int i = 0; i < 10; i++)
+        {
+            if (instrs[i]) 
+            {
+                char s[128];
+                const char *lbl_name = "";
+                if (instrs[i]->at == nrom_get_vector(&nrom, VEC_NMI)) {
+                    lbl_name = "NMI";
+                }
+                if (instrs[i]->at == nrom_get_vector(&nrom, VEC_RESET)) {
+                    lbl_name = "RST";
+                }
+                if (instrs[i]->at == nrom_get_vector(&nrom, VEC_IRQ)) {
+                    lbl_name = "IRQ";
+                }
+
+                sprintf(s, "%3s %c %4X %s", lbl_name, i == 5 ? '>' : ' ', instrs[i]->at, instrs[i]->value);
+                ui_draw_text(&uidraw, s, (SDL_Point){256, 10+i*8}, 1);
+            }
+        }
 
         SDL_RenderPresent(renderer);
         

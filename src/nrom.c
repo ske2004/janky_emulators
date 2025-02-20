@@ -1,23 +1,6 @@
 #include <stdint.h>
-#include "ppu.c"
-
-enum vector
-{
-    VEC_NMI,
-    VEC_RESET,
-    VEC_IRQ
-};
-
-struct nrom
-{
-    struct ricoh_decoder decoder;
-    struct ricoh_state cpu;
-    struct ppu ppu;
-
-    uint8_t prgsize;
-    uint8_t chrsize;
-    uint8_t memory[1<<16];
-};
+#include <string.h>
+#include "neske.h"
 
 static void _nrom_mem_write(void *mem, uint16_t addr, uint8_t data)
 {
@@ -68,6 +51,8 @@ uint16_t nrom_get_vector(struct nrom *nrom, enum vector vec)
         case VEC_RESET: return _nrom_mem_read(nrom, 0xFFFC) | (_nrom_mem_read(nrom, 0xFFFD) << 8);
         case VEC_IRQ: return   _nrom_mem_read(nrom, 0xFFFE) | (_nrom_mem_read(nrom, 0xFFFF) << 8);
     }
+
+    return 0;
 }
 
 uint8_t nrom_load(uint8_t *ines, struct nrom *out)
@@ -104,8 +89,10 @@ uint8_t nrom_load(uint8_t *ines, struct nrom *out)
     {
         return 3;
     }
+
+    uint32_t mirroring = ines[6]&1;
     
-    out->ppu = ppu_mk();
+    out->ppu = ppu_mk(mirroring ? PPUMIR_VER : PPUMIR_HOR);
     ppu_write_chr(&out->ppu, ines+16+prg_size, chr_size);
 
     return 0;
@@ -120,11 +107,6 @@ struct ricoh_mem_interface nrom_get_memory_interface(struct nrom *nrom)
     };
 }
 
-struct nrom_frame_result
-{
-    uint8_t screen[240*256];
-};
-
 struct nrom_frame_result nrom_frame(struct nrom *nrom)
 {
     struct ricoh_mem_interface mem = nrom_get_memory_interface(nrom);
@@ -138,24 +120,6 @@ struct nrom_frame_result nrom_frame(struct nrom *nrom)
         
         if (nrom->cpu.cycles*3 < nrom->ppu.ticks)
         {
-            // char buf[1024] = { 0 };
-            // ricoh_format_decoded_instr(buf, decoded);
-
-            // printf("%04X  ", nrom->cpu.pc);
-            // switch (decoded.size)
-            // {
-            //     case 1: printf("%02X        ", mem.get(mem.instance, start)); break;
-            //     case 2: printf("%02X %02X     ", mem.get(mem.instance, start), mem.get(mem.instance, start+1)); break;
-            //     case 3: printf("%02X %02X %02X  ", mem.get(mem.instance, start), mem.get(mem.instance, start+1), mem.get(mem.instance, start+2)); break;
-            // }
-
-            // printf("%s", buf);
-            // for (size_t i = 0; i < 32-strlen(buf); i++)
-            // {
-            //     printf(" ");
-            // }
-            // printf("A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%d\n", nrom->cpu.a,nrom-> cpu.x, nrom->cpu.y, nrom->cpu.flags, nrom->cpu.sp, nrom->cpu.cycles);
-
             ricoh_run_instr(&nrom->cpu, decoded, &mem);
         }
         else
