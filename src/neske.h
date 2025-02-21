@@ -124,7 +124,7 @@ struct ppu
     uint8_t extlatch;
     uint8_t regs[PPUIR_COUNT];
     uint16_t beam;
-    uint16_t scanline;
+    int16_t scanline;
     uint32_t ticks;
     uint8_t screen[256*240];
     enum ppu_mir mirroring_mode;

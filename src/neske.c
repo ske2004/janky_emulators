@@ -75,6 +75,12 @@ void _ui_set_draw_color_rgba(struct ui_draw *it, uint32_t rgba)
     SDL_SetRenderDrawColor(it->renderer, rgba>>24, rgba>>16, rgba>>8, rgba);
 }
 
+void ui_draw_rect(struct ui_draw *it, SDL_FRect rect)
+{
+    _ui_set_draw_color_rgba(it, 0x2222AAFF);
+    SDL_RenderRect(it->renderer, &rect);
+}
+
 void ui_draw_text(struct ui_draw *it, const char *text, SDL_Point xy, int scale)
 {
     draw_string(it->renderer, it->font, text, xy, scale);
@@ -205,6 +211,14 @@ int main(int argc, char* argv[]) {
         SDL_FRect src = {0, 0, 256, 240};
         SDL_FRect dst = {0, 0, 256, 240};
         SDL_RenderTexture(renderer, sdltexture, &src, &dst);
+
+        // for (int x = 0; x < 8; x++)
+        // {
+        //     for (int y = 0; y < 8; y++)
+        //     {
+        //         ui_draw_rect(&uidraw, (SDL_FRect){x*32, y*32, 32, 32});
+        //     }
+        // }
 
         // ui_draw_item(&uidraw, (SDL_FRect){10, 10, 200, 200}, true);
         struct print_instr *instrs[10];

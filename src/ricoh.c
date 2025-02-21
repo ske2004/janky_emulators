@@ -181,7 +181,7 @@ const char *ricoh_instr_name(enum instr instr)
 
 struct instr_decoded ricoh_decode_instr(struct ricoh_decoder *decoder, struct ricoh_mem_interface *mem, uint16_t addr)
 {
-    struct instr_decoded decoded;
+    struct instr_decoded decoded = { 0 };
     uint8_t opc = mem->get(mem->instance, addr);
     decoded.id = decoder->itbl[opc];
     decoded.addr_mode = decoder->atbl[opc];

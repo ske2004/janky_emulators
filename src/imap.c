@@ -57,6 +57,7 @@ void imap_list_range(struct imap *imap, uint16_t entry, struct print_instr **des
         return;
     }
 
+
     struct print_instr *pi = imap->addr[entry];
 
     while (pi->prev && from != 0)
@@ -65,9 +66,9 @@ void imap_list_range(struct imap *imap, uint16_t entry, struct print_instr **des
         pi = pi->prev;
     }
 
-    size += from;
+    int start = -from;
 
-    for (int i = 0; pi && i < size; i++)
+    for (int i = start; pi && i < size; i++)
     {
         dest[i] = pi;
         pi = pi->next;

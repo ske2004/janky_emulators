@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>
@@ -6,6 +7,11 @@
 static void _nrom_mem_write(void *mem, uint16_t addr, uint8_t data)
 {
     struct nrom *nrom = mem;
+
+    if (addr >= 0x2000 && addr < 0x4000)
+    {
+        addr = 0x2000 + ((addr-0x2000)%8);
+    }
 
     switch (addr)
     {
@@ -27,6 +33,9 @@ static void _nrom_mem_write(void *mem, uint16_t addr, uint8_t data)
             }
             break;
         default:
+            if (addr >= 0x8000) {
+                assert(false);
+            }
             if (nrom->prgsize == 1 && addr >= 0xC000) addr -= 0x4000;
             nrom->memory[addr] = data;
             break;
@@ -42,6 +51,11 @@ static uint8_t _nrom_mem_read(void *mem, uint16_t addr)
 {
     struct nrom *nrom = mem;
  
+    if (addr >= 0x2000 && addr < 0x4000)
+    {
+        addr = 0x2000  +((addr-0x2000)%8);
+    }
+
     switch (addr)
     {
         case 0x2002: return ppu_read(&nrom->ppu, PPUIO_STATUS);
@@ -139,15 +153,11 @@ struct nrom_frame_result nrom_frame(struct nrom *nrom)
 {
     struct ricoh_mem_interface mem = nrom_get_memory_interface(nrom);
 
-    uint32_t start = nrom->cpu.cycles;
-
     while (true)
     {
-        uint16_t start = nrom->cpu.pc;
-        struct instr_decoded decoded = ricoh_decode_instr(&nrom->decoder, &mem, nrom->cpu.pc);
-        
         if (nrom->cpu.cycles*3 < nrom->ppu.ticks)
         {
+            struct instr_decoded decoded = ricoh_decode_instr(&nrom->decoder, &mem, nrom->cpu.pc);
             ricoh_run_instr(&nrom->cpu, decoded, &mem);
         }
         else

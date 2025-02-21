@@ -1,7 +1,39 @@
 #include "neske.h"
 #include <assert.h>
 #include <string.h>
-#include <stdio.h>
+
+uint16_t ppu_vram_map(struct ppu *ppu, uint16_t addr)
+{
+    if (addr >= 0x2000 && addr < 0x3000)
+    {
+        if (ppu->mirroring_mode == PPUMIR_HOR)
+        {
+            if ((addr >= 0x2400 && addr < 0x2800) || (addr >= 0x2C00 && addr < 0x3000))
+            {
+                addr -= 0x400;
+            }
+        }
+        else 
+        {
+            if (addr >= 0x2800 && addr < 0x3000)
+            {
+                addr -= 0x800;
+            }
+        }
+    }
+
+    return addr;
+}
+
+uint8_t ppu_vram_read(struct ppu *ppu, uint16_t addr)
+{
+    return ppu->vram[ppu_vram_map(ppu, addr)];
+}
+
+void ppu_vram_write(struct ppu *ppu, uint16_t addr, uint8_t val)
+{
+    ppu->vram[ppu_vram_map(ppu, addr)] = val;
+}
 
 struct ppu ppu_mk(enum ppu_mir mirroring_mode)
 {
@@ -26,14 +58,16 @@ uint16_t ppu_get_addr(struct ppu *ppu)
 void ppu_set_addr(struct ppu *ppu, uint16_t addr)
 {
     ppu->regs[PPUIR_SCROLLYADDRLO] = addr & 0xFF;
-    ppu->regs[PPUIR_SCROLLXADDRHI] = (addr >> 8) & 0xFF;
+    ppu->regs[PPUIR_SCROLLXADDRHI] = (addr >> 8) & 0x3F;
 }
 
 void ppu_write(struct ppu *ppu, enum ppu_io io, uint8_t data)
 {
     switch (io)
     {
-        case PPUIO_CTRL: ppu->regs[PPUIR_CTRL] = data; break;
+        case PPUIO_CTRL:
+            ppu->regs[PPUIR_CTRL] = data;
+            break;
         case PPUIO_MASK: ppu->regs[PPUIR_MASK] = data; break;
         case PPUIO_OAMADDR: ppu->regs[PPUIR_OAMADDR] = data; break;
         case PPUIO_OAMDATA: ppu->regs[PPUIR_OAMDATA] = data; break;
@@ -42,11 +76,10 @@ void ppu_write(struct ppu *ppu, enum ppu_io io, uint8_t data)
             if (ppu->extlatch) 
             { ppu->extlatch = 0; ppu->regs[PPUIR_SCROLLYADDRLO] = data; }
             else
-            { ppu->extlatch = 1; ppu->regs[PPUIR_SCROLLXADDRHI] = data; ppu->regs[PPUIR_CTRL] &= ~0x3; }
+            { ppu->extlatch = 1; ppu->regs[PPUIR_SCROLLXADDRHI] = data; ppu->regs[PPUIR_CTRL] &= 0b11111100; }
             break;
         case PPUIO_DATA:
-            // printf("Write! %x -> %x\n", data, ppu_get_addr(ppu));
-            ppu->vram[ppu_get_addr(ppu)] = data;
+            ppu_vram_write(ppu, ppu_get_addr(ppu), data);
             if (ppu->regs[PPUIR_CTRL] & (1 << 2)) {
                 ppu_set_addr(ppu, ppu_get_addr(ppu)+32);
             } else {
@@ -62,17 +95,7 @@ void ppu_write(struct ppu *ppu, enum ppu_io io, uint8_t data)
 
 void ppu_vblank(struct ppu *ppu)
 {
-    ppu->regs[PPUIR_STATUS] = ppu->regs[PPUIR_STATUS] | (1<<7);
-}
-
-uint8_t ppu_vram_read(struct ppu *ppu, uint16_t addr)
-{
-    return ppu->vram[ppu_get_addr(ppu)];
-}
-
-void ppu_vram_write(struct ppu *ppu, uint16_t addr, uint8_t val)
-{
-    ppu->vram[ppu_get_addr(ppu)] = val;
+    ppu->regs[PPUIR_STATUS] |= 1<<7;
 }
 
 uint8_t ppu_read(struct ppu *ppu, enum ppu_io io)
@@ -260,13 +283,22 @@ bool ppu_cycle(struct ppu *ppu, struct ricoh_mem_interface *mem)
 
     ppu->ticks += 1;
 
+    if (ppu->scanline == -1 && ppu->beam == 0)
+    {
+        ppu->regs[PPUIO_STATUS] = ppu->regs[PPUIO_STATUS]&~(1<<7);
+    }
+
     if (ppu->beam > 340)
     {
         ppu->scanline += 1;
         ppu->beam = 0;
     }
-    
-    if (ppu->scanline < 240) 
+ 
+    if (ppu->scanline == -1)   
+    {
+        // nothing
+    }
+    else if (ppu->scanline < 240) 
     {
         if (ppu->beam < 256)
         {
@@ -292,7 +324,7 @@ bool ppu_cycle(struct ppu *ppu, struct ricoh_mem_interface *mem)
     }
     else
     {
-        ppu->scanline = 0;
+        ppu->scanline = -1;
         ppu->beam = -1;
         ppu->regs[PPUIO_STATUS] = ppu->regs[PPUIO_STATUS]&~(1<<6);
     }
