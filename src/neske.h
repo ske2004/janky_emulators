@@ -88,8 +88,6 @@ enum ppu_ir
     PPUIR_STATUS,
     PPUIR_OAMADDR,
     PPUIR_OAMDATA,
-    PPUIR_SCROLLXADDRHI,
-    PPUIR_SCROLLYADDRLO,
     PPUIR_DATA,
     PPUIR_OAMDMA,
     PPUIR_COUNT
@@ -116,18 +114,37 @@ enum ppu_mir
     PPUMIR_HOR,
 };
 
+struct ppu_object
+{
+    uint8_t y;
+    uint8_t tile;
+    uint8_t attr;
+    uint8_t x;
+};
 
 struct ppu
 {
-    uint8_t oam[256];
+    // Internal memory
+    struct ppu_object oam[64];
     uint8_t vram[1<<14];
-    uint8_t extlatch;
     uint8_t regs[PPUIR_COUNT];
+
+    // Internal Registers   
+    uint16_t t;
+    uint8_t x;
+    uint8_t w;
+    uint32_t v;
+
+
+    // Rendering & Timing
+    uint8_t screen[256*240];
+    enum ppu_mir mirroring_mode;
     uint16_t beam;
     int16_t scanline;
     uint32_t ticks;
-    uint8_t screen[256*240];
-    enum ppu_mir mirroring_mode;
+    struct ppu_object preload_objects[8];
+    uint8_t preload_objects_sprite_0;
+    uint8_t preload_objects_count;
 };
 
 struct ppu ppu_mk(enum ppu_mir mirroring_mode);

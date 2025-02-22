@@ -1,1 +1,1 @@
-misc\build && bin\neske P:\ROMS\smb.nes
+misc\build && bin\neske %*

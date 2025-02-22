@@ -51,14 +51,12 @@ void ppu_write_chr(struct ppu *ppu, uint8_t *chr, uint32_t chr_size)
 
 uint16_t ppu_get_addr(struct ppu *ppu)
 {
-    return (((uint16_t)ppu->regs[PPUIR_SCROLLXADDRHI] << 8) |
-            ((uint16_t)ppu->regs[PPUIR_SCROLLYADDRLO])) & 0x3FFF;
+    return ppu->v & 0x3FFF;
 }
 
 void ppu_set_addr(struct ppu *ppu, uint16_t addr)
 {
-    ppu->regs[PPUIR_SCROLLYADDRLO] = addr & 0xFF;
-    ppu->regs[PPUIR_SCROLLXADDRHI] = (addr >> 8) & 0x3F;
+    ppu->v = addr & 0x3FFF;
 }
 
 void ppu_write(struct ppu *ppu, enum ppu_io io, uint8_t data)
@@ -67,16 +65,43 @@ void ppu_write(struct ppu *ppu, enum ppu_io io, uint8_t data)
     {
         case PPUIO_CTRL:
             ppu->regs[PPUIR_CTRL] = data;
+            ppu->t &= ~((1<<10)|(1<<11));
+            ppu->t |= (data&0b11)<<10;
             break;
         case PPUIO_MASK: ppu->regs[PPUIR_MASK] = data; break;
         case PPUIO_OAMADDR: ppu->regs[PPUIR_OAMADDR] = data; break;
         case PPUIO_OAMDATA: ppu->regs[PPUIR_OAMDATA] = data; break;
-        case PPUIO_SCROLL: 
         case PPUIO_ADDR: 
-            if (ppu->extlatch) 
-            { ppu->extlatch = 0; ppu->regs[PPUIR_SCROLLYADDRLO] = data; }
+            if (ppu->w == 0) 
+            {
+                ppu->w = 1;
+                ppu->t &= ~(((1<<7)-1)<<8);
+                ppu->t |= (data&((1<<6)-1))<<8;
+            }
             else
-            { ppu->extlatch = 1; ppu->regs[PPUIR_SCROLLXADDRHI] = data; ppu->regs[PPUIR_CTRL] &= 0b11111100; }
+            {
+                ppu->w = 0;
+                ppu->t &= ~((1<<8)-1);
+                ppu->t |= data;
+                ppu->v = ppu->t;
+            }
+            break;
+        case PPUIO_SCROLL: 
+            if (ppu->w == 0) 
+            {
+                ppu->w = 1;
+                ppu->t &= ~((1<<5)-1);
+                ppu->t |= (data>>3)&((1<<5)-1);
+                ppu->x = data&((1<<3)-1);
+            }
+            else
+            {
+                ppu->w = 0;
+                ppu->t &= ~(((1<<5)-1)<<5);
+                ppu->t |= ((data>>3)&((1<<5)-1))<<5;
+                ppu->t &= ~(((1<<3)-1)<<12);
+                ppu->t |= ((data)&((1<<3)-1))<<12;
+            }
             break;
         case PPUIO_DATA:
             ppu_vram_write(ppu, ppu_get_addr(ppu), data);
@@ -106,6 +131,7 @@ uint8_t ppu_read(struct ppu *ppu, enum ppu_io io)
             {
                 uint8_t result = ppu->regs[PPUIR_STATUS];
                 ppu->regs[PPUIR_STATUS] = (ppu->regs[PPUIR_STATUS]<<1)>>1;
+                ppu->w = 0;
                 return result;
             }
             break;
@@ -171,11 +197,11 @@ struct ppu_nametable_result ppu_read_nametable(struct ppu *ppu, uint8_t x, uint8
         y -= 30;
     }
 
-    uint8_t octx =  (x>>2);
-    uint8_t octy =  (y>>2);
-    uint8_t quadx = (x>>1)&1;
-    uint8_t quady = (y>>1)&1;
-    uint8_t q = (quadx|(1<<quady))*2;
+    uint8_t octx =  (x>>2);   // 0 0
+    uint8_t octy =  (y>>2);   // 1 1
+    uint8_t quadx = (x>>1)&1; // 0 1
+    uint8_t quady = (y>>1)&1; // 0 0
+    uint8_t q = (quadx|(quady<<1))<<1; // right
     uint8_t palidx = (ppu->vram[addr+0x3C0+octx+octy*8]>>q)&3;
 
     return (struct ppu_nametable_result) {
@@ -186,10 +212,13 @@ struct ppu_nametable_result ppu_read_nametable(struct ppu *ppu, uint8_t x, uint8
 
 void ppu_get_scroll(struct ppu *ppu, uint16_t *sx, uint16_t *sy)
 {
-    *sx = ppu->regs[PPUIR_SCROLLXADDRHI];
-    *sy = ppu->regs[PPUIR_SCROLLYADDRLO];
-    *sx += (ppu->regs[PPUIR_CTRL]&1) ? 256 : 0;
-    *sy += (ppu->regs[PPUIR_CTRL]&2) ? 240 : 0;
+    *sx = (((ppu->t&((1<<5)-1))<<3) |   // XXXXX
+          (ppu->x&((1<<3)-1))) +        // Fine xxx
+          ((ppu->t&(1<<10)) ? 256 : 0); // Nametable select
+
+    *sy = ((((ppu->t>>5)&((1<<5)-1))<<3) | // YYYYY
+          ((ppu->t>>12)&((1<<3)-1))) +     // Fine yyy
+          ((ppu->t&(1<<11)) ? 240 : 0);    // Nametable select
 }
 
 uint8_t ppu_get_pixel(struct ppu *ppu, int x, int y)
@@ -233,46 +262,93 @@ uint8_t ppu_get_pixel(struct ppu *ppu, int x, int y)
     }
 
     if (ppu->regs[PPUIR_MASK]&(1<<4))
-        for (int o = 0; o < 64; o++)
-        {
-            uint8_t oy    = ppu->oam[o*4+0]+1;
-            uint16_t tile = ppu->oam[o*4+1];
-            uint8_t attr   = ppu->oam[o*4+2];
-            uint8_t ox    = ppu->oam[o*4+3];
-
-            if (oy == 0) continue;
-
-            if (x-ox >= 8 || x-ox < 0 || y-oy >= 8 || y-oy < 0)
+    {
+        if (ppu->regs[PPUIR_CTRL]&(1<<5))
+            for (int o = 0; o < ppu->preload_objects_count; o++)
             {
-                continue;
+                struct ppu_object obj = ppu->preload_objects[o];
+               
+                uint16_t tile1 = (obj.tile&~1)+((obj.tile&1)*0x100);
+                uint16_t tile2 = tile1+1;
+
+                if (obj.y == 0) continue;
+
+                if (x-obj.x >= 8 || x-obj.x < 0 || y-obj.y >= 16 || y-obj.y < 0)
+                {
+                    continue;
+                }
+
+                int tx = x-obj.x;
+                if (obj.attr & (1<<6)) tx = 8-tx-1;
+                int ty = y-obj.y;
+                if (obj.attr & (1<<7))
+                {
+                    ty = 16-ty-1;
+                }
+                
+                uint16_t tile = ty >= 8 ? tile2 : tile1;
+                uint8_t palidx = obj.attr&3;
+                ty %= 8;
+
+                uint8_t lo = (ppu->vram[tile*16+ty]>>(7-tx))&1;
+                uint8_t hi = (ppu->vram[tile*16+8+ty]>>(7-tx))&1;
+                uint8_t palcoloridx = lo | (hi << 1);
+                uint8_t palcolor = ppu->vram[0x3F10+palidx*4+palcoloridx];
+             
+                if (palcoloridx == 0) 
+                {
+                    continue;
+                }
+
+                if (opaque && o == 0 && ppu->preload_objects_sprite_0)
+                {
+                    ppu->regs[PPUIO_STATUS] = ppu->regs[PPUIO_STATUS]|(1<<6);
+                }
+                
+                if (!(obj.attr & (1<<5) && opaque))
+                    pixel = palcolor;       
             }
-
-            int tx = x-ox;
-            if (attr & (1<<6)) tx = 8-tx-1;
-            int ty = y-oy;
-            if (attr & (1<<7)) ty = 8-ty-1;
-
-            if (ppu->regs[PPUIR_CTRL] & (1<<3)) tile += 0x100;
-            uint8_t palidx = attr&3;
-
-            uint8_t lo = (ppu->vram[tile*16+ty]>>(7-tx))&1;
-            uint8_t hi = (ppu->vram[tile*16+8+ty]>>(7-tx))&1;
-            uint8_t palcoloridx = lo | (hi << 1);
-            uint8_t palcolor = ppu->vram[0x3F10+palidx*4+palcoloridx];
-         
-            if (palcoloridx == 0) 
+        else
+            for (int o = 0; o < ppu->preload_objects_count; o++)
             {
-                continue;
-            }
+                struct ppu_object obj = ppu->preload_objects[o];
 
-            if (opaque && o == 0)
-            {
-                ppu->regs[PPUIO_STATUS] = ppu->regs[PPUIO_STATUS]|(1<<6);
+                uint16_t tile = obj.tile;
+
+                if (obj.y == 0) continue;
+
+                if (x-obj.x >= 8 || x-obj.x < 0 || y-obj.y >= 8 || y-obj.y < 0)
+                {
+                    continue;
+                }
+
+                int tx = x-obj.x;
+                if (obj.attr & (1<<6)) tx = 8-tx-1;
+                int ty = y-obj.y;
+                if (obj.attr & (1<<7)) ty = 8-ty-1;
+
+                if (ppu->regs[PPUIR_CTRL] & (1<<3)) tile += 0x100;
+                uint8_t palidx = obj.attr&3;
+
+                uint8_t lo = (ppu->vram[tile*16+ty]>>(7-tx))&1;
+                uint8_t hi = (ppu->vram[tile*16+8+ty]>>(7-tx))&1;
+                uint8_t palcoloridx = lo | (hi << 1);
+                uint8_t palcolor = ppu->vram[0x3F10+palidx*4+palcoloridx];
+             
+                if (palcoloridx == 0) 
+                {
+                    continue;
+                }
+
+                if (opaque && o == 0 && ppu->preload_objects_sprite_0)
+                {
+                    ppu->regs[PPUIO_STATUS] = ppu->regs[PPUIO_STATUS]|(1<<6);
+                }
+                
+                if (!(obj.attr & (1<<5) && opaque))
+                    pixel = palcolor;
             }
-            
-            if (!(attr & (1<<5) && opaque))
-                pixel = palcolor;
-        }
+    }
 
     return pixel;
 }
@@ -285,13 +361,42 @@ bool ppu_cycle(struct ppu *ppu, struct ricoh_mem_interface *mem)
 
     if (ppu->scanline == -1 && ppu->beam == 0)
     {
-        ppu->regs[PPUIO_STATUS] = ppu->regs[PPUIO_STATUS]&~(1<<7);
+        // I didn't look into this properly but I assume you need to reset the sprite overflow flag
+        ppu->regs[PPUIR_STATUS] &= ~(1<<5);
+        ppu->regs[PPUIO_STATUS] &= ~(1<<7);
     }
 
     if (ppu->beam > 340)
     {
         ppu->scanline += 1;
         ppu->beam = 0;
+        ppu->preload_objects_count = 0;
+        ppu->preload_objects_sprite_0 = 0;
+
+        for (int o = 0; o < 64; o++)
+        {
+            struct ppu_object obj = ppu->oam[o];
+            // @TODO: Maybe not here
+            obj.y += 1;
+
+            int height = ppu->regs[PPUIR_CTRL]&(1<<5) ? 16 : 8;
+
+            if (ppu->scanline >= obj.y && ppu->scanline < obj.y+height)
+            {
+                if (ppu->preload_objects_count == 8) 
+                {
+                    // Sprite overflow, but this isn't a proper way to handle it
+                    // there's a bug in the original hardware, I cba to implement it right now -.-
+                    ppu->regs[PPUIR_STATUS] |= 1<<5;
+                    break;
+                }
+
+                if (o == 0)
+                    ppu->preload_objects_sprite_0 = 1;
+
+                ppu->preload_objects[ppu->preload_objects_count++] = obj;
+            }
+        }
     }
  
     if (ppu->scanline == -1)   
