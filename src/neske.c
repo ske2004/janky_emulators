@@ -1,5 +1,7 @@
 #include <stdio.h>
+#include "SDL3/SDL_audio.h"
 #include "SDL3/SDL_keycode.h"
+#include "SDL3/SDL_oldnames.h"
 #include "SDL3/SDL_rect.h"
 #include "SDL3/SDL_render.h"
 #include "SDL3/SDL_surface.h"
@@ -98,6 +100,11 @@ void ui_draw_item(struct ui_draw *it, SDL_FRect rect, bool hover)
     SDL_RenderRect(it->renderer, &rect);
 }
 
+void audio_callback(void *userdata, SDL_AudioStream *stream, int additional_amount, int total_amount)
+{
+    printf("Yo\n");
+}
+
 int main(int argc, char* argv[]) {
     if (argc != 2)
     {
@@ -167,7 +174,28 @@ int main(int argc, char* argv[]) {
 
     struct controller_state controller = { 0 };
 
+
+    SDL_AudioSpec audio_in = { 0 };
+
+    audio_in.channels = 1;
+    audio_in.format = SDL_AUDIO_U8;
+    audio_in.freq = 22050;
+
+    SDL_AudioDeviceID audio_device = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, NULL);
+    SDL_AudioStream *audio_device_stream = SDL_OpenAudioDeviceStream(audio_device, &audio_in, audio_callback, NULL);
+
+    SDL_ResumeAudioDevice(audio_device);
+    SDL_ResumeAudioStreamDevice(audio_device_stream);
+
     while (!done) {
+        uint8_t buf[1024] = { 0 };
+        for (int i = 0; i < 1024; i++)
+        {
+            buf[i] = (i/64%2) ? 255 : 0;
+        }
+
+        SDL_PutAudioStreamData(audio_device_stream, buf, 1024);
+        SDL_FlushAudioStream(audio_device_stream);
         struct nrom_frame_result result = nrom_frame(&nrom);
 
         for (int i = 0; i < 240*256; i++)

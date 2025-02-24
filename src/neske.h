@@ -230,4 +230,27 @@ uint8_t nrom_load(uint8_t *ines, struct nrom *out);
 struct ricoh_mem_interface nrom_get_memory_interface(struct nrom *nrom);
 struct nrom_frame_result nrom_frame(struct nrom *nrom);
 
+// APU.H
+
+struct apu_chan
+{
+    uint8_t sweep_enable;
+    uint8_t sweep_period;
+    uint8_t sweep_negate;
+    uint8_t sweep_shift;
+
+    uint8_t envl_loop;
+    uint8_t envl_use_volume_or_period;
+    uint8_t envl_volume_or_period;
+
+    uint8_t duty;
+    uint8_t length;
+    uint16_t timer;
+};
+
+struct apu
+{
+    int sdfksdjfsl;
+};
+
 #endif
