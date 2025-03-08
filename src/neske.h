@@ -232,6 +232,16 @@ struct nrom_frame_result nrom_frame(struct nrom *nrom);
 
 // APU.H
 
+enum apu_reg
+{
+    APU_PULSE1_DDLC_NNNN,
+    APU_PULSE1_EPPP_NSSS,
+    APU_PULSE1_LLLL_LLLL,
+    APU_PULSE1_LLLL_LHHH,
+
+    APU_STATUS_IFXD_NT21
+};
+
 struct apu_chan
 {
     uint8_t sweep_enable;
@@ -245,12 +255,29 @@ struct apu_chan
 
     uint8_t duty;
     uint8_t length;
+    uint16_t timer_init;
     uint16_t timer;
+
+    uint8_t duty_cycle;
+};
+
+
+struct apu_writer
+{
+    void *userdata;
+    void (*write)(void *userdata, uint8_t *samples, uint32_t count);
 };
 
 struct apu
 {
-    int sdfksdjfsl;
+    uint8_t frame_counter;
+    uint8_t status;
+    uint32_t last_frame_counter_cycles;
+    uint32_t cycles;
+    struct apu_chan pulse1;
 };
+
+
+void apu_flush(struct apu *apu, void *dest, int count);
 
 #endif
