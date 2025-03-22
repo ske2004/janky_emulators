@@ -1,5 +1,4 @@
 #include "neske.h"
-#include <stdio.h>
 
 #define APU_FLAG_DMC    (1 << 4)
 #define APU_FLAG_NOISE  (1 << 3)
@@ -31,15 +30,18 @@ void apu_reg_write(struct apu *apu, enum apu_reg reg, uint8_t value)
         if (apu->pulse1.envl_constant) {
             apu->pulse1.volume = apu->pulse1.envl_volume_or_period;
         } else {
-            apu->pulse1.sweep_period = apu->pulse1.envl_volume_or_period;
+            apu->pulse1.period = apu->pulse1.envl_volume_or_period;
+            apu->pulse1.volume = 15;
         }
-        printf("P1A: %d %d %d %d\n", apu->pulse1.duty, apu->pulse1.envl_halt, apu->pulse1.envl_constant, apu->pulse1.envl_volume_or_period);
+        // printf("P1A: %d %d %d %d\n", apu->pulse1.duty, apu->pulse1.envl_halt, apu->pulse1.envl_constant, apu->pulse1.envl_volume_or_period);
         break;
     case APU_PULSE1_EPPP_NSSS:
-        apu->pulse1.sweep_enable              = (value & 0x80) >> 7;
-        apu->pulse1.sweep_period              = ((value & 0x70) >> 4)&0x7;
-        apu->pulse1.sweep_negate              = ((value & 0x08) >> 3)&1;
-        apu->pulse1.sweep_shift               = ((value & 0x07))&0x7;
+        apu->pulse1.sweep_enable              = (value >> 7)&1;
+        apu->pulse1.sweep_period              = (value >> 4)&0x7;
+        apu->pulse1.sweep_clock               = apu->pulse1.sweep_period;
+        apu->pulse1.sweep_negate              = (value >> 3)&1;
+        apu->pulse1.sweep_shift               = (value >> 0)&0x7;
+        // printf("P1S: %d %d %d %d\n", apu->pulse1.sweep_enable, apu->pulse1.sweep_period, apu->pulse1.sweep_negate, apu->pulse1.sweep_shift);
         break;
     case APU_PULSE1_LLLL_LLLL:
         apu->pulse1.timer_init                = value;
@@ -51,7 +53,7 @@ void apu_reg_write(struct apu *apu, enum apu_reg reg, uint8_t value)
         apu->pulse1.timer = apu->pulse1.timer_init;
         apu->pulse1.length                    = length_lut[(value&0xF8)>>3];
         apu->pulse1.duty_cycle = 0; // reset duty cycle
-        printf("P1D: %d %d\n", apu->pulse1.timer_init, apu->pulse1.length);
+        // printf("P1D: %d %d\n", apu->pulse1.timer_init, apu->pulse1.length);
         break;
     case APU_STATUS_IFXD_NT21:
         if (value & 1) {
@@ -108,27 +110,76 @@ static uint8_t read_sample(struct apu *apu)
     return 0;
 }
 
-static void envelope_cycle(struct apu *apu)
+static void pulse_envelope_cycle(struct apu_pulse_chan *pulse)
 {
-    // printf("Envelope cycle\n");
-    if (!apu->pulse1.envl_constant)
+    if (!pulse->envl_constant)
     {
         // if envelope
-        apu->pulse1.volume -= 1;
-        if (apu->pulse1.envl_halt && apu->pulse1.envl_volume_or_period == 0)
+        pulse->period -= 1;
+        if (pulse->period == 0)
         {
-            apu->pulse1.volume = apu->pulse1.envl_volume_or_period;
+            pulse->period = pulse->envl_volume_or_period;
+            pulse->volume -= 1;
+        }
+
+        if (pulse->volume == 0)
+        {
+            pulse->volume = 15;
         }
     }
 }
 
-static void length_cycle(struct apu *apu)
+static void pulse_length_sweep_cycle(struct apu_pulse_chan *pulse)
 {
-    // printf("Length cycle\n");
-    if (!apu->pulse1.envl_halt && apu->pulse1.length > 0) 
+    if (!pulse->envl_halt && pulse->length > 0) 
     {
-        apu->pulse1.length--;
+        pulse->length--;
     }
+
+    if (pulse->sweep_enable)
+    {
+        if (pulse->sweep_clock == 0) 
+        {
+            pulse->sweep_clock = pulse->sweep_period;
+
+            int change = pulse->timer >> pulse->sweep_shift;
+            if (pulse->sweep_negate)
+            {
+                change = -change;
+            }
+
+            int sum = pulse->timer_init + change;
+
+            if (sum < 8)
+            {
+                sum = 8;
+                // HACK?
+                pulse->length = 0;
+            }
+            if (sum > 0x7FF)
+            {
+                sum = 0x7FF;
+                // HACK AGAIN??
+                pulse->length = 0;
+            }
+
+            pulse->timer_init = sum;
+        }
+        else
+        {
+            pulse->sweep_clock -= 1;
+        }
+    }
+}
+
+static void envelope_cycle(struct apu *apu)
+{
+    pulse_envelope_cycle(&apu->pulse1);
+}
+
+static void length_sweep_cycle(struct apu *apu)
+{
+    pulse_length_sweep_cycle(&apu->pulse1);
 }
 
 static void frame_cycle(struct apu *apu)
@@ -137,9 +188,9 @@ static void frame_cycle(struct apu *apu)
     {
         switch (apu->frame_counter%4) 
         {
-        case 0: envelope_cycle(apu); length_cycle(apu); break;
+        case 0: envelope_cycle(apu); length_sweep_cycle(apu); break;
         case 1: envelope_cycle(apu); break;
-        case 2: envelope_cycle(apu); length_cycle(apu); break;
+        case 2: envelope_cycle(apu); length_sweep_cycle(apu); break;
         case 3: 
             apu->flag_frame_interrupt = 1;
             envelope_cycle(apu);
@@ -148,9 +199,9 @@ static void frame_cycle(struct apu *apu)
     } else {
         switch (apu->frame_counter%5) 
         {
-        case 0: envelope_cycle(apu); length_cycle(apu); break;
+        case 0: envelope_cycle(apu); length_sweep_cycle(apu); break;
         case 1: envelope_cycle(apu); break;
-        case 2: envelope_cycle(apu); length_cycle(apu); break;
+        case 2: envelope_cycle(apu); length_sweep_cycle(apu); break;
         case 3: break;
         case 4: envelope_cycle(apu); break;
         }
@@ -211,5 +262,6 @@ void apu_cycle(struct apu *apu)
     {
         apu->last_cps = cps_treshold;
         apu_ring_write(apu, read_sample(apu));
+        apu->samples_written_this_frame++;
     }  
 }

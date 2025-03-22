@@ -121,6 +121,10 @@ void audio_callback(void *userdata, SDL_AudioStream *stream, int additional_amou
     // // printf("%d\n", count);
     // memcpy(buf, apu->samples, apu->samples_len);
     // apu->samples_len = 0;
+    // 
+    uint8_t buf[2048];
+    apu_ring_read(apu, buf, additional_amount);
+    SDL_PutAudioStreamData(stream, &buf, additional_amount);
 }
 
 int main(int argc, char* argv[]) {
@@ -210,9 +214,8 @@ int main(int argc, char* argv[]) {
         struct nrom_frame_result result = nrom_frame(&nrom);
 
 
-        uint8_t buf[2048];
-        apu_ring_read(&nrom.apu, buf, 735);
-        SDL_PutAudioStreamData(audio_device_stream, &buf, 735);
+        // if (nrom.apu.samples_written_this_frame >= 2048)
+        //     nrom.apu.samples_written_this_frame = 2048-1;
 
         for (int i = 0; i < 240*256; i++)
         {

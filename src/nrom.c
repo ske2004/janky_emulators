@@ -168,6 +168,8 @@ enum {
 
 struct nrom_frame_result nrom_frame(struct nrom *nrom)
 {
+    nrom->apu.samples_written_this_frame = 0;
+
     struct ricoh_mem_interface mem = nrom_get_memory_interface(nrom);
 
     while (true)

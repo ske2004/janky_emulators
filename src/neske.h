@@ -173,7 +173,7 @@ enum apu_reg
     APU_STATUS_MIXX_XXXX,
 };
 
-struct apu_chan
+struct apu_pulse_chan
 {
     uint8_t sweep_enable;
     uint8_t sweep_period;
@@ -187,12 +187,13 @@ struct apu_chan
     uint8_t duty;
     uint8_t length;
     uint16_t timer_init;
-    uint16_t timer;
-
-    uint8_t duty_cycle;
 
     // internal
+    uint8_t sweep_clock;
+    uint16_t timer;
+    uint8_t duty_cycle;
     uint8_t volume;
+    uint8_t period;
 };
 
 
@@ -202,7 +203,7 @@ struct apu_writer
     void (*write)(void *userdata, uint8_t *samples, uint32_t count);
 };
 
-#define APU_SAMPLE_RING_LEN 2048
+#define APU_SAMPLE_RING_LEN (16384*2)
 
 struct apu
 {
@@ -219,8 +220,9 @@ struct apu
     uint8_t sample_ring[APU_SAMPLE_RING_LEN];
     uint32_t sample_ring_write_at;
     uint32_t sample_ring_read_at;
+    uint32_t samples_written_this_frame;
 
-    struct apu_chan pulse1;
+    struct apu_pulse_chan pulse1;
 };
 
 void apu_reg_write(struct apu *apu, enum apu_reg reg, uint8_t value);
