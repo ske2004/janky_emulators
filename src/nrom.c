@@ -22,6 +22,12 @@ static void _nrom_mem_write(void *mem, uint16_t addr, uint8_t data)
         case 0x2005: ppu_write(&nrom->ppu, PPUIO_SCROLL, data); break;
         case 0x2006: ppu_write(&nrom->ppu, PPUIO_ADDR, data); break;
         case 0x2007: ppu_write(&nrom->ppu, PPUIO_DATA, data); break;
+        case 0x4000: apu_reg_write(&nrom->apu, APU_PULSE1_DDLC_NNNN, data); break; // pulse
+        case 0x4001: apu_reg_write(&nrom->apu, APU_PULSE1_EPPP_NSSS, data); break;
+        case 0x4002: apu_reg_write(&nrom->apu, APU_PULSE1_LLLL_LLLL, data); break;
+        case 0x4003: apu_reg_write(&nrom->apu, APU_PULSE1_LLLL_LHHH, data); break; 
+        case 0x4015: apu_reg_write(&nrom->apu, APU_STATUS_IFXD_NT21, data); break;
+        case 0x4017: apu_reg_write(&nrom->apu, APU_STATUS_MIXX_XXXX, data); break; // misc
         case 0x4014: // OAMDMA
             ppu_write_oam(&nrom->ppu, nrom->memory + (((uint16_t)data)<<8));
             nrom->cpu.cycles += nrom->cpu.cycles&2 + 513;
@@ -61,8 +67,13 @@ static uint8_t _nrom_mem_read(void *mem, uint16_t addr)
         case 0x2002: return ppu_read(&nrom->ppu, PPUIO_STATUS);
         case 0x2004: return ppu_read(&nrom->ppu, PPUIO_OAMDATA);
         case 0x2007: return ppu_read(&nrom->ppu, PPUIO_DATA);
+        case 0x4000: return apu_reg_read(&nrom->apu, APU_PULSE1_DDLC_NNNN); break; // pulse
+        case 0x4001: return apu_reg_read(&nrom->apu, APU_PULSE1_EPPP_NSSS); break;
+        case 0x4002: return apu_reg_read(&nrom->apu, APU_PULSE1_LLLL_LLLL); break;
+        case 0x4003: return apu_reg_read(&nrom->apu, APU_PULSE1_LLLL_LHHH); break; 
+        case 0x4015: return apu_reg_read(&nrom->apu, APU_STATUS_IFXD_NT21); break;
         case 0x4017:
-            return 0;
+            return 0; // controller, not apu, confusing ya
         case 0x4016:
 
             if (nrom->controller_strobe != 8)
@@ -149,33 +160,66 @@ struct ricoh_mem_interface nrom_get_memory_interface(struct nrom *nrom)
     };
 }
 
+enum {
+    DEV_CPU,
+    DEV_APU,
+    DEV_PPU,
+};
+
 struct nrom_frame_result nrom_frame(struct nrom *nrom)
 {
     struct ricoh_mem_interface mem = nrom_get_memory_interface(nrom);
 
     while (true)
     {
-        if (nrom->cpu.cycles*3 < nrom->ppu.ticks)
-        {
-            struct instr_decoded decoded = ricoh_decode_instr(&nrom->decoder, &mem, nrom->cpu.pc);
-            ricoh_run_instr(&nrom->cpu, decoded, &mem);
-        }
-        else
-        {
-            bool nmi_occured = ppu_cycle(&nrom->ppu, &mem);
+        bool nmi_occured = false;
 
-            if (nmi_occured)
+        int dev = DEV_CPU;
+        int devc = nrom->cpu.cycles;
+
+        if (devc >= nrom->ppu.cycles/3) {
+            devc = nrom->ppu.cycles/3;
+            dev = DEV_PPU;
+        }
+
+        if (devc >= nrom->apu.cycles*2) {
+            devc = nrom->apu.cycles*2;
+            dev = DEV_APU;
+        }
+
+        switch (dev)
+        {
+        case DEV_CPU:
             {
-                if (ppu_nmi_enabled(&nrom->ppu))
-                {
-                    ricoh_do_interrupt(&nrom->cpu, &mem, nrom_get_vector(nrom, VEC_NMI));
-                }
-                break;
+                struct instr_decoded decoded = ricoh_decode_instr(&nrom->decoder, &mem, nrom->cpu.pc);
+                ricoh_run_instr(&nrom->cpu, decoded, &mem);
             }
+            break;
+        case DEV_APU:
+            {
+                apu_cycle(&nrom->apu);
+            }
+            break;
+        case DEV_PPU:
+            {
+                nmi_occured = ppu_cycle(&nrom->ppu, &mem);
+            }
+            break;
+        }
+
+        if (nmi_occured)
+        {
+            if (ppu_nmi_enabled(&nrom->ppu))
+            {
+                ricoh_do_interrupt(&nrom->cpu, &mem, nrom_get_vector(nrom, VEC_NMI));
+            }
+            break;
         }
     }
 
     struct nrom_frame_result result = { 0 };
+
+    // printf("%d\n", nrom->apu.sample_ring_write_at);
 
     memcpy(result.screen, nrom->ppu.screen, sizeof result.screen);
 

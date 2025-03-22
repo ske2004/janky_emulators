@@ -141,7 +141,7 @@ struct ppu
     enum ppu_mir mirroring_mode;
     uint16_t beam;
     int16_t scanline;
-    uint32_t ticks;
+    uint32_t cycles;
     struct ppu_object preload_objects[8];
     uint8_t preload_objects_sprite_0;
     uint8_t preload_objects_count;
@@ -159,6 +159,75 @@ uint8_t ppu_read(struct ppu *ppu, enum ppu_io io);
 bool ppu_nmi_enabled(struct ppu *ppu);
 void ppu_write_oam(struct ppu *ppu, uint8_t *oamsrc);
 bool ppu_cycle(struct ppu *ppu, struct ricoh_mem_interface *mem);
+
+// APU.H
+
+enum apu_reg
+{
+    APU_PULSE1_DDLC_NNNN,
+    APU_PULSE1_EPPP_NSSS,
+    APU_PULSE1_LLLL_LLLL,
+    APU_PULSE1_LLLL_LHHH,
+    
+    APU_STATUS_IFXD_NT21,
+    APU_STATUS_MIXX_XXXX,
+};
+
+struct apu_chan
+{
+    uint8_t sweep_enable;
+    uint8_t sweep_period;
+    uint8_t sweep_negate;
+    uint8_t sweep_shift;
+
+    uint8_t envl_halt;
+    uint8_t envl_constant;
+    uint8_t envl_volume_or_period;
+
+    uint8_t duty;
+    uint8_t length;
+    uint16_t timer_init;
+    uint16_t timer;
+
+    uint8_t duty_cycle;
+
+    // internal
+    uint8_t volume;
+};
+
+
+struct apu_writer
+{
+    void *userdata;
+    void (*write)(void *userdata, uint8_t *samples, uint32_t count);
+};
+
+#define APU_SAMPLE_RING_LEN 2048
+
+struct apu
+{
+    uint8_t flag_enable_interrupt;
+    uint8_t flag_counter_mode_2;
+    uint8_t flag_frame_interrupt;
+
+    uint32_t frame_counter;
+    uint8_t status;
+    uint32_t last_cpf; // last cycle of frame clock
+    uint32_t last_cps; // last cycle of sample output
+    uint32_t cycles;
+
+    uint8_t sample_ring[APU_SAMPLE_RING_LEN];
+    uint32_t sample_ring_write_at;
+    uint32_t sample_ring_read_at;
+
+    struct apu_chan pulse1;
+};
+
+void apu_reg_write(struct apu *apu, enum apu_reg reg, uint8_t value);
+uint8_t apu_reg_read(struct apu *apu, enum apu_reg reg);
+void apu_flush(struct apu *apu, void *dest, int count);
+void apu_cycle(struct apu *apu);
+void apu_ring_read(struct apu *apu, uint8_t *dest, uint32_t count);
 
 // IMAP.H
 
@@ -210,6 +279,7 @@ struct nrom
     struct ricoh_decoder decoder;
     struct ricoh_state cpu;
     struct ppu ppu;
+    struct apu apu;
     
     struct controller_state controller;
     uint8_t controller_strobe;
@@ -229,55 +299,5 @@ void nrom_update_controller(struct nrom *nrom, struct controller_state cs);
 uint8_t nrom_load(uint8_t *ines, struct nrom *out);
 struct ricoh_mem_interface nrom_get_memory_interface(struct nrom *nrom);
 struct nrom_frame_result nrom_frame(struct nrom *nrom);
-
-// APU.H
-
-enum apu_reg
-{
-    APU_PULSE1_DDLC_NNNN,
-    APU_PULSE1_EPPP_NSSS,
-    APU_PULSE1_LLLL_LLLL,
-    APU_PULSE1_LLLL_LHHH,
-
-    APU_STATUS_IFXD_NT21
-};
-
-struct apu_chan
-{
-    uint8_t sweep_enable;
-    uint8_t sweep_period;
-    uint8_t sweep_negate;
-    uint8_t sweep_shift;
-
-    uint8_t envl_loop;
-    uint8_t envl_use_volume_or_period;
-    uint8_t envl_volume_or_period;
-
-    uint8_t duty;
-    uint8_t length;
-    uint16_t timer_init;
-    uint16_t timer;
-
-    uint8_t duty_cycle;
-};
-
-
-struct apu_writer
-{
-    void *userdata;
-    void (*write)(void *userdata, uint8_t *samples, uint32_t count);
-};
-
-struct apu
-{
-    uint8_t frame_counter;
-    uint8_t status;
-    uint32_t last_frame_counter_cycles;
-    uint32_t cycles;
-    struct apu_chan pulse1;
-};
-
-
-void apu_flush(struct apu *apu, void *dest, int count);
 
 #endif

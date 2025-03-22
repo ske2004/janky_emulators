@@ -357,7 +357,7 @@ bool ppu_cycle(struct ppu *ppu, struct ricoh_mem_interface *mem)
 {
     bool nmi_occured = false;
 
-    ppu->ticks += 1;
+    ppu->cycles += 1;
 
     if (ppu->scanline == -1 && ppu->beam == 0)
     {

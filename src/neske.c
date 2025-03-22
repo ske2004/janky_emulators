@@ -114,11 +114,13 @@ void ui_draw_item(struct ui_draw *it, SDL_FRect rect, bool hover)
 
 void audio_callback(void *userdata, SDL_AudioStream *stream, int additional_amount, int total_amount)
 {
-    for (int i = 0; i < total_amount; i++)
-    {
-        uint8_t sample = (i%32)<=16?16-i:i-16;
-        SDL_PutAudioStreamData(stream, &sample, 1);
-    }
+    struct apu *apu = userdata;
+    // uint8_t buf[2048] = { 0 };
+    // uint32_t count = apu->samples_len;
+
+    // // printf("%d\n", count);
+    // memcpy(buf, apu->samples, apu->samples_len);
+    // apu->samples_len = 0;
 }
 
 int main(int argc, char* argv[]) {
@@ -195,15 +197,22 @@ int main(int argc, char* argv[]) {
 
     audio_in.channels = 1;
     audio_in.format = SDL_AUDIO_U8;
-    audio_in.freq = 22050;
+    audio_in.freq = 44100;
 
     SDL_AudioDeviceID audio_device = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, NULL);
-    SDL_AudioStream *audio_device_stream = SDL_OpenAudioDeviceStream(audio_device, &audio_in, audio_callback, NULL);
+    SDL_AudioStream *audio_device_stream = SDL_OpenAudioDeviceStream(audio_device, &audio_in, audio_callback, &nrom.apu);
+
+    nrom_frame(&nrom);
 
     SDL_ResumeAudioStreamDevice(audio_device_stream);
 
     while (!done) {
         struct nrom_frame_result result = nrom_frame(&nrom);
+
+
+        uint8_t buf[2048];
+        apu_ring_read(&nrom.apu, buf, 735);
+        SDL_PutAudioStreamData(audio_device_stream, &buf, 735);
 
         for (int i = 0; i < 240*256; i++)
         {

@@ -1,5 +1,6 @@
 #include "ricoh.c"
 #include "nrom.c"
+#include "apu.c"
 #include "ppu.c"
 #include "imap.c"
 #include "neske.c"
