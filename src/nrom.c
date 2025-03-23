@@ -190,8 +190,8 @@ struct nrom_frame_result nrom_frame(struct nrom *nrom)
             dev = DEV_PPU;
         }
 
-        if (devc >= nrom->apu.cycles*2) {
-            devc = nrom->apu.cycles*2;
+        if (devc >= nrom->apu.cycles) {
+            devc = nrom->apu.cycles;
             dev = DEV_APU;
         }
 

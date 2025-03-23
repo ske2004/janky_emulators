@@ -178,6 +178,19 @@ enum apu_reg
     APU_STATUS_MIXX_XXXX,
 };
 
+struct apu_tri_chan
+{
+    uint8_t flag_control;
+
+    uint16_t timer_init;
+    uint8_t counter_init;
+    uint8_t length;
+
+    // internal
+    uint16_t timer;
+    uint8_t counter;
+};
+
 struct apu_pulse_chan
 {
     uint8_t sweep_enable;

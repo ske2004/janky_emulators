@@ -318,18 +318,22 @@ void apu_ring_read(struct apu *apu, uint8_t *dest, uint32_t count)
 
 void apu_cycle(struct apu *apu)
 {
+    // triangle clocks at CPU speed so others need to clock at half CPU speed  
+    if ((apu->cycles & 1) == 1)
+    {
+        pulse_clock(&apu->pulse1);
+        pulse_clock(&apu->pulse2);
+    }
+    
     apu->cycles++;
 
-    pulse_clock(&apu->pulse1);
-    pulse_clock(&apu->pulse2);
-
     // dats cycles per frame
-    uint32_t cpf = (1789773 / 2) / 240;
+    uint32_t cpf = 1789773 / 240;
     uint32_t cpf_treshold = apu->last_cpf + cpf;
     
     // this is cycles per sample
-    // 44.1 khz for the target sample, it's not even lol
-    uint32_t cps = (1789773 / 2) / 44100;
+    // 44.1 khz for the target sample
+    uint32_t cps = 1789773 / 44100;
     uint32_t cps_treshold = apu->last_cps + cps;
 
     if (apu->cycles > cpf_treshold)
