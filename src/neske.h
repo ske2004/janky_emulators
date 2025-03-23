@@ -135,7 +135,6 @@ struct ppu
     uint8_t w;
     uint32_t v;
 
-
     // Rendering & Timing
     uint8_t screen[256*240];
     enum ppu_mir mirroring_mode;
@@ -221,6 +220,7 @@ struct apu_pulse_chan
     uint8_t duty_cycle;
     uint8_t volume;
     uint8_t period;
+    uint8_t flag_start;
 };
 
 struct apu_writer

@@ -28,9 +28,12 @@ static void pulse_reg_write(struct apu_pulse_chan *pulse, uint8_t reg, uint8_t v
         pulse->envl_halt             = (value >> 5)&1;
         pulse->envl_constant         = (value >> 4)&1;
         pulse->envl_volume_or_period = (value & 0x0F);
-        if (pulse->envl_constant) {
+        if (pulse->envl_constant)
+        {
             pulse->volume = pulse->envl_volume_or_period;
-        } else {
+        }
+        else
+        {
             pulse->period = pulse->envl_volume_or_period;
         }
         // printf("P1A: %d %d %d %d\n", pulse->duty, pulse->envl_halt, pulse->envl_constant, pulse->envl_volume_or_period);
@@ -44,22 +47,25 @@ static void pulse_reg_write(struct apu_pulse_chan *pulse, uint8_t reg, uint8_t v
         // printf("P1S: %d %d %d %d\n", pulse->sweep_enable, pulse->sweep_period, pulse->sweep_negate, pulse->sweep_shift);
         break;
     case 2:
-        pulse->timer_init             = value;
-        pulse->timer                  = pulse->timer_init;
+        pulse->timer_init            = value;
+        // pulse->timer                  = pulse->timer_init;
         // printf("P1T %d\n", pulse->timer_init);
         break;
     case 3:
-        if (pulse->envl_constant) {
+        if (pulse->envl_constant)
+        {
             pulse->volume = pulse->envl_volume_or_period;
-        } else {
-            pulse->period = pulse->envl_volume_or_period;
-            pulse->volume = 15;
         }
-        pulse->timer_init            &= 0xFF;
-        pulse->timer_init            |= (value&0x7) << 8;
-        pulse->timer                 = pulse->timer_init;
+        else
+        {
+            pulse->period = pulse->envl_volume_or_period;
+        }
+        pulse->flag_start            = 1; // restart envelope
+        pulse->timer_init           &= 0xFF;
+        pulse->timer_init           |= (value&0x7) << 8;
+        // pulse->timer                 = pulse->timer_init;
         pulse->length                = length_lut[value>>3];
-        pulse->duty_cycle            = 0; // reset duty cycle
+        pulse->duty_cycle            = 0; // restart sequencer
         // printf("P1D: %d %d\n", pulse->timer_init, pulse->length);
         break;
     }
@@ -192,7 +198,17 @@ static uint8_t read_sample(struct apu *apu)
 
 static void pulse_envelope_cycle(struct apu_pulse_chan *pulse)
 {
-    if (!pulse->envl_constant)
+    if (pulse->envl_constant)
+    {
+        return;
+    }
+
+    if (pulse->flag_start)
+    {
+        pulse->volume = 15;
+        pulse->flag_start = 0;
+    }
+    else
     {
         if (pulse->period == 0)
         {
@@ -221,10 +237,10 @@ static void pulse_length_sweep_cycle(struct apu_pulse_chan *pulse)
         pulse->length--;
     }   
 
-    pulse->sweep_lock = false;
-
     if (pulse->sweep_enable && pulse->sweep_clock == 0)
     {
+        pulse->sweep_lock = false;
+
         int change = pulse->timer_init >> pulse->sweep_shift;
         if (pulse->sweep_negate)
         {
@@ -273,11 +289,6 @@ static void tri_length_cycle(struct apu_tri_chan *tri)
     {
         tri->flag_reload = 0;
     }
-
-    if (tri->length > 0)
-    {
-        tri->length--;
-    }
 }
 
 void apu_init(struct apu *apu)
@@ -287,19 +298,18 @@ void apu_init(struct apu *apu)
 
 static void pulse_clock(struct apu_pulse_chan *pulse)
 {
-    if (pulse->length == 0 || pulse->sweep_lock)
-    {
-        return;
-    }
-
     pulse->timer--;
     if (pulse->timer > pulse->timer_init)
     {
-        pulse->duty_cycle++;
         pulse->timer = pulse->timer_init;
+        
+        if (pulse->length == 0 || pulse->sweep_lock)
+        {
+            return;
+        }       
+        pulse->duty_cycle++;
+        pulse->duty_cycle %= 8;
     }   
-    
-    pulse->duty_cycle %= 8;
 }
 
 static void tri_clock(struct apu_tri_chan *tri)
@@ -314,9 +324,8 @@ static void tri_clock(struct apu_tri_chan *tri)
         }
    
         tri->sequence++;
+        tri->sequence %= 32;
     }
- 
-    tri->sequence %= 32;
 }
 
 static void envelope_cycle(struct apu *apu)
@@ -330,6 +339,11 @@ static void length_sweep_cycle(struct apu *apu)
 {
     pulse_length_sweep_cycle(&apu->pulse1);
     pulse_length_sweep_cycle(&apu->pulse2);
+
+    if (apu->tri.length > 0)
+    {
+        apu->tri.length--;
+    }
 }
 
 static void frame_cycle(struct apu *apu)
