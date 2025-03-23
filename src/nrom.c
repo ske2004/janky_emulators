@@ -22,10 +22,14 @@ static void _nrom_mem_write(void *mem, uint16_t addr, uint8_t data)
         case 0x2005: ppu_write(&nrom->ppu, PPUIO_SCROLL, data); break;
         case 0x2006: ppu_write(&nrom->ppu, PPUIO_ADDR, data); break;
         case 0x2007: ppu_write(&nrom->ppu, PPUIO_DATA, data); break;
-        case 0x4000: apu_reg_write(&nrom->apu, APU_PULSE1_DDLC_NNNN, data); break; // pulse
+        case 0x4000: apu_reg_write(&nrom->apu, APU_PULSE1_DDLC_NNNN, data); break; // pulse 1
         case 0x4001: apu_reg_write(&nrom->apu, APU_PULSE1_EPPP_NSSS, data); break;
         case 0x4002: apu_reg_write(&nrom->apu, APU_PULSE1_LLLL_LLLL, data); break;
         case 0x4003: apu_reg_write(&nrom->apu, APU_PULSE1_LLLL_LHHH, data); break; 
+        case 0x4004: apu_reg_write(&nrom->apu, APU_PULSE2_DDLC_NNNN, data); break; // pulse 2
+        case 0x4005: apu_reg_write(&nrom->apu, APU_PULSE2_EPPP_NSSS, data); break;
+        case 0x4006: apu_reg_write(&nrom->apu, APU_PULSE2_LLLL_LLLL, data); break;
+        case 0x4007: apu_reg_write(&nrom->apu, APU_PULSE2_LLLL_LHHH, data); break;
         case 0x4015: apu_reg_write(&nrom->apu, APU_STATUS_IFXD_NT21, data); break;
         case 0x4017: apu_reg_write(&nrom->apu, APU_STATUS_MIXX_XXXX, data); break; // misc
         case 0x4014: // OAMDMA
@@ -113,6 +117,8 @@ uint8_t nrom_load(uint8_t *ines, struct nrom *out)
     {
         return 1;
     }
+
+    apu_init(&out->apu);
 
     *out = (struct nrom){ 0 };
     out->prgsize = ines[4];

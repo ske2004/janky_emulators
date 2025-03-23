@@ -168,6 +168,11 @@ enum apu_reg
     APU_PULSE1_EPPP_NSSS,
     APU_PULSE1_LLLL_LLLL,
     APU_PULSE1_LLLL_LHHH,
+
+    APU_PULSE2_DDLC_NNNN,
+    APU_PULSE2_EPPP_NSSS,
+    APU_PULSE2_LLLL_LLLL,
+    APU_PULSE2_LLLL_LHHH,
     
     APU_STATUS_IFXD_NT21,
     APU_STATUS_MIXX_XXXX,
@@ -189,13 +194,13 @@ struct apu_pulse_chan
     uint16_t timer_init;
 
     // internal
+    uint8_t sweep_onecomp;
     uint8_t sweep_clock;
     uint16_t timer;
     uint8_t duty_cycle;
     uint8_t volume;
     uint8_t period;
 };
-
 
 struct apu_writer
 {
@@ -223,8 +228,10 @@ struct apu
     uint32_t samples_written_this_frame;
 
     struct apu_pulse_chan pulse1;
+    struct apu_pulse_chan pulse2;
 };
 
+void apu_init(struct apu *apu);
 void apu_reg_write(struct apu *apu, enum apu_reg reg, uint8_t value);
 uint8_t apu_reg_read(struct apu *apu, enum apu_reg reg);
 void apu_flush(struct apu *apu, void *dest, int count);
