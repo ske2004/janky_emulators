@@ -22,6 +22,7 @@ static void _nrom_mem_write(void *mem, uint16_t addr, uint8_t data)
         case 0x2005: ppu_write(&nrom->ppu, PPUIO_SCROLL, data); break;
         case 0x2006: ppu_write(&nrom->ppu, PPUIO_ADDR, data); break;
         case 0x2007: ppu_write(&nrom->ppu, PPUIO_DATA, data); break;
+
         case 0x4000: apu_reg_write(&nrom->apu, APU_PULSE1_DDLC_NNNN, data); break; // pulse 1
         case 0x4001: apu_reg_write(&nrom->apu, APU_PULSE1_EPPP_NSSS, data); break;
         case 0x4002: apu_reg_write(&nrom->apu, APU_PULSE1_LLLL_LLLL, data); break;
@@ -30,11 +31,15 @@ static void _nrom_mem_write(void *mem, uint16_t addr, uint8_t data)
         case 0x4005: apu_reg_write(&nrom->apu, APU_PULSE2_EPPP_NSSS, data); break;
         case 0x4006: apu_reg_write(&nrom->apu, APU_PULSE2_LLLL_LLLL, data); break;
         case 0x4007: apu_reg_write(&nrom->apu, APU_PULSE2_LLLL_LHHH, data); break;
-        case 0x4008: apu_reg_write(&nrom->apu, APU_TRIANG_CRRR_RRRR, data); break;
+        case 0x4008: apu_reg_write(&nrom->apu, APU_TRIANG_CRRR_RRRR, data); break; // triangle
         case 0x400A: apu_reg_write(&nrom->apu, APU_TRIANG_LLLL_LLLL, data); break;
         case 0x400B: apu_reg_write(&nrom->apu, APU_TRIANG_LLLL_LHHH, data); break;
-        case 0x4015: apu_reg_write(&nrom->apu, APU_STATUS_IFXD_NT21, data); break;
+        case 0x400C: apu_reg_write(&nrom->apu, APU_NOISER_XXLC_VVVV, data); break; // noise
+        case 0x400E: apu_reg_write(&nrom->apu, APU_NOISER_MXXX_PPPP, data); break;
+        case 0x400F: apu_reg_write(&nrom->apu, APU_NOISER_LLLL_LXXX, data); break;
+        case 0x4015: apu_reg_write(&nrom->apu, APU_STATUS_IFXD_NT21, data); break; // status
         case 0x4017: apu_reg_write(&nrom->apu, APU_STATUS_MIXX_XXXX, data); break; // misc
+
         case 0x4014: // OAMDMA
             ppu_write_oam(&nrom->ppu, nrom->memory + (((uint16_t)data)<<8));
             nrom->cpu.cycles += nrom->cpu.cycles&2 + 513;
@@ -74,10 +79,6 @@ static uint8_t _nrom_mem_read(void *mem, uint16_t addr)
         case 0x2002: return ppu_read(&nrom->ppu, PPUIO_STATUS);
         case 0x2004: return ppu_read(&nrom->ppu, PPUIO_OAMDATA);
         case 0x2007: return ppu_read(&nrom->ppu, PPUIO_DATA);
-        case 0x4000: return apu_reg_read(&nrom->apu, APU_PULSE1_DDLC_NNNN); break; // pulse
-        case 0x4001: return apu_reg_read(&nrom->apu, APU_PULSE1_EPPP_NSSS); break;
-        case 0x4002: return apu_reg_read(&nrom->apu, APU_PULSE1_LLLL_LLLL); break;
-        case 0x4003: return apu_reg_read(&nrom->apu, APU_PULSE1_LLLL_LHHH); break; 
         case 0x4015: return apu_reg_read(&nrom->apu, APU_STATUS_IFXD_NT21); break;
         case 0x4017:
             return 0; // controller, not apu, confusing ya
@@ -89,7 +90,6 @@ static uint8_t _nrom_mem_read(void *mem, uint16_t addr)
             }
             else
             {
-                printf("STROBE: %d\n", nrom->controller_strobe);
                 return 1;
             }
 
@@ -120,8 +120,6 @@ uint8_t nrom_load(uint8_t *ines, struct nrom *out)
     {
         return 1;
     }
-
-    apu_init(&out->apu);
 
     *out = (struct nrom){ 0 };
     out->prgsize = ines[4];
@@ -154,6 +152,7 @@ uint8_t nrom_load(uint8_t *ines, struct nrom *out)
 
     uint32_t mirroring = ines[6]&1;
     
+    apu_init(&out->apu);
     out->ppu = ppu_mk(mirroring ? PPUMIR_VER : PPUMIR_HOR);
     ppu_write_chr(&out->ppu, ines+16+prg_size, chr_size);
 

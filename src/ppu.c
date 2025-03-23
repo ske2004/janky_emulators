@@ -346,7 +346,10 @@ uint8_t ppu_get_pixel(struct ppu *ppu, int x, int y)
                 }
                 
                 if (!(obj.attr & (1<<5) && opaque))
+                {
                     pixel = palcolor;
+                    break;
+                }
             }
     }
 

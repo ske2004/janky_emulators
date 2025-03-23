@@ -9,9 +9,15 @@
 
 static const uint8_t duty_cycles[4] = { 0x40, 0x60, 0x78, 0x9F };
 
-static const uint8_t length_lut[] = {
+static const uint8_t length_lut[] =
+{
     10,254, 20,  2, 40,  4, 80,  6, 160,  8, 60, 10, 14, 12, 26, 14,
     12, 16, 24, 18, 48, 20, 96, 22, 192, 24, 72, 26, 16, 28, 32, 30
+};
+
+static const uint16_t period_lut[] =
+{
+    4, 8, 16, 32, 64, 96, 128, 160, 202, 254, 380, 508, 762, 1016, 2034, 4068
 };
 
 static uint8_t duty_get_cycle(uint8_t duty, uint8_t cycle)
@@ -28,13 +34,9 @@ static void pulse_reg_write(struct apu_pulse_chan *pulse, uint8_t reg, uint8_t v
         pulse->envl_halt             = (value >> 5)&1;
         pulse->envl_constant         = (value >> 4)&1;
         pulse->envl_volume_or_period = (value & 0x0F);
-        if (pulse->envl_constant)
+        if (!pulse->envl_constant)
         {
-            pulse->volume = pulse->envl_volume_or_period;
-        }
-        else
-        {
-            pulse->period = pulse->envl_volume_or_period;
+            pulse->period            = pulse->envl_volume_or_period; // restart envelope
         }
         // printf("P1A: %d %d %d %d\n", pulse->duty, pulse->envl_halt, pulse->envl_constant, pulse->envl_volume_or_period);
         break;
@@ -52,19 +54,14 @@ static void pulse_reg_write(struct apu_pulse_chan *pulse, uint8_t reg, uint8_t v
         // printf("P1T %d\n", pulse->timer_init);
         break;
     case 3:
-        if (pulse->envl_constant)
-        {
-            pulse->volume = pulse->envl_volume_or_period;
-        }
-        else
-        {
-            pulse->period = pulse->envl_volume_or_period;
-        }
         pulse->flag_start            = 1; // restart envelope
         pulse->timer_init           &= 0xFF;
         pulse->timer_init           |= (value&0x7) << 8;
         // pulse->timer                 = pulse->timer_init;
-        pulse->length                = length_lut[value>>3];
+        if (pulse->enabled)
+        {
+            pulse->length            = length_lut[value>>3];
+        }
         pulse->duty_cycle            = 0; // restart sequencer
         // printf("P1D: %d %d\n", pulse->timer_init, pulse->length);
         break;
@@ -98,27 +95,62 @@ void apu_reg_write(struct apu *apu, enum apu_reg reg, uint8_t value)
         break;
     case APU_TRIANG_LLLL_LHHH:
         apu->tri.flag_reload = 1;
-        apu->tri.length = length_lut[value>>3];
+        if (apu->tri.enabled)
+        {
+            apu->tri.length = length_lut[value>>3];
+        }
         apu->tri.timer_init &= 0xFF;
         apu->tri.timer_init |= (value&0x7)<<8;
         apu->tri.timer       = apu->tri.timer_init;
         // printf("T1C: %d %d\n", apu->tri.length, apu->tri.timer_init);
         break;
 
+    case APU_NOISER_XXLC_VVVV:
+        apu->noise.envl_halt             = (value>>5)&1;
+        apu->noise.envl_constant         = (value>>4)&1;
+        apu->noise.envl_volume_or_period = (value)&0xF;
+        if (!apu->noise.envl_constant)
+        {
+            apu->noise.period            = apu->noise.envl_volume_or_period; // restart envelope
+        }
+        // printf("N1A: %d %d %d\n", apu->noise.envl_halt, apu->noise.envl_constant, apu->noise.envl_volume_or_period);
+        break;
+
+    case APU_NOISER_MXXX_PPPP:
+        apu->noise.timer_init = period_lut[value&0xF];
+        apu->noise.mode       = value>>7;
+        // printf("N1B: %d %d\n", apu->noise.timer_init, apu->noise.mode);
+        break;
+
+    case APU_NOISER_LLLL_LXXX:
+        if (apu->noise.enabled)
+        {
+            apu->noise.length     = length_lut[value>>3];
+        }
+        apu->noise.flag_start = 1;
+        // printf("N1C: %d\n", apu->noise.length);
+        break;
+
     case APU_STATUS_IFXD_NT21:
-        if ((value & 1) == 0)
+        apu->pulse1.enabled = (value & 1) > 0;
+        if (!apu->pulse1.enabled)
         {
             apu->pulse1.length = 0;
-            apu->pulse1.envl_halt = 1;
         }
-        if ((value & 2) == 0)
+        apu->pulse2.enabled = (value & 2) > 0;
+        if (!apu->pulse2.enabled)
         {
             apu->pulse2.length = 0;
-            apu->pulse2.envl_halt = 1;
         }
-        if ((value & 4) == 0)
+        apu->tri.enabled = (value & 4) > 0;
+        if (!apu->tri.enabled)
         {
             apu->tri.length = 0;
+        }
+        apu->noise.enabled = (value & 8) > 0;
+        if (!apu->noise.enabled)
+        {
+            apu->noise.length = 0;
         }
         // TODO: i dont use this
         apu->status = value;
@@ -145,6 +177,8 @@ uint8_t apu_reg_read(struct apu *apu, enum apu_reg reg)
             flags |= (apu->pulse2.length > 0 && !apu->pulse2.sweep_lock)<<1;
             // tri enabled (TODO: do i count the internal counter as well?)
             flags |= (apu->tri.length > 0)<<2;
+            // noise enabled
+            flags |= (apu->noise.length > 0)<<3;
             // interrupt inhibit flag
             flags |= apu->flag_frame_interrupt << 6;
             apu->flag_frame_interrupt = 0;
@@ -160,26 +194,40 @@ uint8_t apu_reg_read(struct apu *apu, enum apu_reg reg)
 static uint8_t read_sample(struct apu *apu)
 {   
     uint8_t pulse1 = 0;
-    uint8_t pulse2 = 0;
 
-    if (!apu->pulse1.sweep_lock)
+    if (apu->pulse1.length != 0 && !apu->pulse1.sweep_lock)
     {
-        pulse1 = duty_get_cycle(apu->pulse1.duty, apu->pulse1.duty_cycle) * apu->pulse1.volume;
+        uint8_t volume = apu->pulse1.envl_constant ? apu->pulse1.envl_volume_or_period : apu->pulse1.decay;
+        pulse1 = duty_get_cycle(apu->pulse1.duty, apu->pulse1.duty_cycle) * volume;
     }
     
-    if (!apu->pulse2.sweep_lock)
+    uint8_t pulse2 = 0;
+    
+    if (apu->pulse2.length != 0 && !apu->pulse2.sweep_lock)
     {
-        pulse2 = duty_get_cycle(apu->pulse2.duty, apu->pulse2.duty_cycle) * apu->pulse2.volume;
+        uint8_t volume = apu->pulse2.envl_constant ? apu->pulse2.envl_volume_or_period : apu->pulse2.decay;
+        pulse2 = duty_get_cycle(apu->pulse2.duty, apu->pulse2.duty_cycle) * volume;
     }
 
     uint8_t tri = 0;
 
-    tri = apu->tri.sequence-16;
-    if (apu->tri.sequence < 16) tri = 15-apu->tri.sequence;
+    if (apu->tri.length != 0)
+    {
+        tri = apu->tri.sequence-16;
+        if (apu->tri.sequence < 16) tri = 15-apu->tri.sequence;
+    }
+
+    uint8_t noise = 0;
+
+    if (apu->noise.length != 0 && (apu->noise.lfsr&1) != 0)
+    {
+        uint8_t volume = apu->noise.envl_constant ? apu->noise.envl_volume_or_period : apu->noise.decay;
+        noise = volume;
+    }
 
     float pulse = 95.88/((8128.0/((float)(pulse1 + pulse2)))+100.0);
     // i don't implement DMC (TODO)
-    float tri_noise_dmc = 159.79/(1.0/(tri/8227.0)+100.0);
+    float tri_noise_dmc = 159.79/(1.0/((tri/8227.0)+(noise/12241.0))+100.0);
 
     int sample = (pulse + tri_noise_dmc) * 255;
 
@@ -198,14 +246,10 @@ static uint8_t read_sample(struct apu *apu)
 
 static void pulse_envelope_cycle(struct apu_pulse_chan *pulse)
 {
-    if (pulse->envl_constant)
-    {
-        return;
-    }
-
     if (pulse->flag_start)
     {
-        pulse->volume = 15;
+        pulse->period = pulse->envl_volume_or_period;
+        pulse->decay = 15;
         pulse->flag_start = 0;
     }
     else
@@ -213,19 +257,19 @@ static void pulse_envelope_cycle(struct apu_pulse_chan *pulse)
         if (pulse->period == 0)
         {
             pulse->period = pulse->envl_volume_or_period;
-            if (pulse->volume > 0)
+
+            if (pulse->decay > 0)
             {
-                pulse->volume -= 1;
+                pulse->decay -= 1;
+            }
+            else if (pulse->envl_halt)
+            {
+                pulse->decay = 15;
             }
         }
         else 
         {
             pulse->period -= 1;
-        }
-
-        if (pulse->envl_halt && pulse->volume == 0)
-        {
-            pulse->volume = 15;
         }
     }
 }
@@ -235,9 +279,13 @@ static void pulse_length_sweep_cycle(struct apu_pulse_chan *pulse)
     if (!pulse->envl_halt && pulse->length > 0) 
     {
         pulse->length--;
-    }   
-
-    if (pulse->sweep_enable && pulse->sweep_clock == 0)
+    }
+    
+    if (!pulse->sweep_enable) 
+    {
+        pulse->sweep_lock = false;
+    }
+    else if (pulse->sweep_clock == 0)
     {
         pulse->sweep_lock = false;
 
@@ -263,6 +311,7 @@ static void pulse_length_sweep_cycle(struct apu_pulse_chan *pulse)
             pulse->timer_init = sum;
         }
     }
+
     if (pulse->sweep_reload || pulse->sweep_clock == 0)
     {
         pulse->sweep_clock = pulse->sweep_period;
@@ -291,9 +340,40 @@ static void tri_length_cycle(struct apu_tri_chan *tri)
     }
 }
 
+static void noise_envelope_cycle(struct apu_noise_chan *noise)
+{
+    if (noise->flag_start)
+    {
+        noise->period = noise->envl_volume_or_period;
+        noise->decay = 15;
+        noise->flag_start = 0;
+    }
+    else
+    {
+        if (noise->period == 0)
+        {
+            noise->period = noise->envl_volume_or_period;
+
+            if (noise->decay > 0)
+            {
+                noise->decay -= 1;
+            }
+            else if (noise->envl_halt)
+            {
+                noise->decay = 15;
+            }
+        }
+        else 
+        {
+            noise->period -= 1;
+        }
+    }
+}
+
 void apu_init(struct apu *apu)
 {
     apu->pulse1.sweep_onecomp = 1;
+    apu->noise.lfsr = 1;
 }
 
 static void pulse_clock(struct apu_pulse_chan *pulse)
@@ -328,17 +408,41 @@ static void tri_clock(struct apu_tri_chan *tri)
     }
 }
 
+static void noise_clock(struct apu_noise_chan *noise)
+{
+    noise->timer--;
+    if (noise->timer > noise->timer_init)
+    {
+        noise->timer = noise->timer_init;
+        if (noise->length == 0)
+        {
+            return;
+        }
+
+        uint16_t bit = noise->mode == 1 ? 6 : 1;
+        uint16_t xor = (noise->lfsr & 1) ^ ((noise->lfsr >> bit) & 1);
+        noise->lfsr >>= 1;
+        noise->lfsr |= xor << 14; 
+    }
+}
+
 static void envelope_cycle(struct apu *apu)
 {
     pulse_envelope_cycle(&apu->pulse1);
     pulse_envelope_cycle(&apu->pulse2);
     tri_length_cycle(&apu->tri);
+    noise_envelope_cycle(&apu->noise);
 }
 
 static void length_sweep_cycle(struct apu *apu)
 {
     pulse_length_sweep_cycle(&apu->pulse1);
     pulse_length_sweep_cycle(&apu->pulse2);
+
+    if (!apu->noise.envl_halt && apu->noise.length > 0)
+    {
+        apu->noise.length--;
+    }
 
     if (apu->tri.length > 0)
     {
@@ -398,6 +502,7 @@ void apu_ring_read(struct apu *apu, uint8_t *dest, uint32_t count)
 void apu_cycle(struct apu *apu)
 {
     // triangle clocks at CPU speed so others need to clock at half CPU speed  
+    // noise cycles in LUT are in CPU cycles
     apu->cycles++;
 
     if ((apu->cycles & 1) == 1)
@@ -406,6 +511,7 @@ void apu_cycle(struct apu *apu)
         pulse_clock(&apu->pulse2);
     }
 
+    noise_clock(&apu->noise);
     tri_clock(&apu->tri);
 
     // dats cycles per frame

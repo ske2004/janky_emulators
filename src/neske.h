@@ -177,6 +177,10 @@ enum apu_reg
     APU_TRIANG_LLLL_LLLL,
     APU_TRIANG_LLLL_LHHH,
 
+    APU_NOISER_XXLC_VVVV,
+    APU_NOISER_MXXX_PPPP,
+    APU_NOISER_LLLL_LXXX,
+
     APU_STATUS_IFXD_NT21,
     APU_STATUS_MIXX_XXXX,
 };
@@ -194,6 +198,27 @@ struct apu_tri_chan
     uint16_t timer;
     uint8_t counter;
     uint8_t sequence;
+    uint8_t enabled;
+};
+
+struct apu_noise_chan
+{
+    uint16_t lfsr;
+
+    uint8_t envl_halt;
+    uint8_t envl_constant;
+    uint8_t envl_volume_or_period;
+    uint8_t length;
+    uint8_t mode;
+
+    uint16_t timer;
+    uint16_t timer_init;
+
+    // internal
+    uint8_t flag_start;
+    uint8_t period;
+    uint8_t decay;
+    uint8_t enabled;
 };
 
 struct apu_pulse_chan
@@ -218,9 +243,10 @@ struct apu_pulse_chan
     uint8_t sweep_clock;
     uint16_t timer;
     uint8_t duty_cycle;
-    uint8_t volume;
+    uint8_t decay;
     uint8_t period;
     uint8_t flag_start;
+    uint8_t enabled;
 };
 
 struct apu_writer
@@ -229,7 +255,7 @@ struct apu_writer
     void (*write)(void *userdata, uint8_t *samples, uint32_t count);
 };
 
-#define APU_SAMPLE_RING_LEN (16384*2)
+#define APU_SAMPLE_RING_LEN (16384)
 
 struct apu
 {
@@ -251,6 +277,7 @@ struct apu
     struct apu_pulse_chan pulse1;
     struct apu_pulse_chan pulse2;
     struct apu_tri_chan tri;
+    struct apu_noise_chan noise;
 };
 
 void apu_init(struct apu *apu);
