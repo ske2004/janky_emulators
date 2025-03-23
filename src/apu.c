@@ -82,11 +82,12 @@ void apu_reg_write(struct apu *apu, enum apu_reg reg, uint8_t value)
     case APU_TRIANG_CRRR_RRRR:
         apu->tri.flag_control = value >> 7;
         apu->tri.counter_init = value & 0x7F;
+        // apu->tri.counter      = apu->tri.counter_init;
         // printf("T1A: %d %d\n", apu->tri.flag_control, apu->tri.counter_init);
         break;
     case APU_TRIANG_LLLL_LLLL:
         apu->tri.timer_init = value;
-        apu->tri.timer       = apu->tri.timer_init;
+        apu->tri.timer      = apu->tri.timer_init;
         // printf("T1B: %d\n", value);
         break;
     case APU_TRIANG_LLLL_LHHH:
@@ -154,7 +155,7 @@ static uint8_t read_sample(struct apu *apu)
 {   
     uint8_t pulse1 = 0;
     uint8_t pulse2 = 0;
-    
+
     if (!apu->pulse1.sweep_lock)
     {
         pulse1 = duty_get_cycle(apu->pulse1.duty, apu->pulse1.duty_cycle) * apu->pulse1.volume;
@@ -172,7 +173,7 @@ static uint8_t read_sample(struct apu *apu)
 
     float pulse = 95.88/((8128.0/((float)(pulse1 + pulse2)))+100.0);
     // i don't implement DMC (TODO)
-    float tri_noise_dmc = 0;//159.79/(1.0/(tri/8227.0)+100.0);
+    float tri_noise_dmc = 159.79/(1.0/(tri/8227.0)+100.0);
 
     int sample = (pulse + tri_noise_dmc) * 255;
 
@@ -306,15 +307,15 @@ static void tri_clock(struct apu_tri_chan *tri)
     tri->timer--;
     if (tri->timer > tri->timer_init)
     {
-        tri->sequence++;
         tri->timer = tri->timer_init;
+        if (tri->length == 0 || tri->counter == 0)
+        {
+            return;
+        }
+   
+        tri->sequence++;
     }
  
-    if (tri->length == 0 || tri->counter == 0)
-    {
-        return;
-    }
-   
     tri->sequence %= 32;
 }
 
@@ -322,13 +323,13 @@ static void envelope_cycle(struct apu *apu)
 {
     pulse_envelope_cycle(&apu->pulse1);
     pulse_envelope_cycle(&apu->pulse2);
+    tri_length_cycle(&apu->tri);
 }
 
 static void length_sweep_cycle(struct apu *apu)
 {
     pulse_length_sweep_cycle(&apu->pulse1);
     pulse_length_sweep_cycle(&apu->pulse2);
-    tri_length_cycle(&apu->tri);
 }
 
 static void frame_cycle(struct apu *apu)
