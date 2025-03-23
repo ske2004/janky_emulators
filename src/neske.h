@@ -174,6 +174,10 @@ enum apu_reg
     APU_PULSE2_LLLL_LLLL,
     APU_PULSE2_LLLL_LHHH,
     
+    APU_TRIANG_CRRR_RRRR,
+    APU_TRIANG_LLLL_LLLL,
+    APU_TRIANG_LLLL_LHHH,
+
     APU_STATUS_IFXD_NT21,
     APU_STATUS_MIXX_XXXX,
 };
@@ -181,6 +185,7 @@ enum apu_reg
 struct apu_tri_chan
 {
     uint8_t flag_control;
+    uint8_t flag_reload;
 
     uint16_t timer_init;
     uint8_t counter_init;
@@ -189,6 +194,7 @@ struct apu_tri_chan
     // internal
     uint16_t timer;
     uint8_t counter;
+    uint8_t sequence;
 };
 
 struct apu_pulse_chan
@@ -207,6 +213,8 @@ struct apu_pulse_chan
     uint16_t timer_init;
 
     // internal
+    uint8_t sweep_reload;
+    uint8_t sweep_lock;
     uint8_t sweep_onecomp;
     uint8_t sweep_clock;
     uint16_t timer;
@@ -242,6 +250,7 @@ struct apu
 
     struct apu_pulse_chan pulse1;
     struct apu_pulse_chan pulse2;
+    struct apu_tri_chan tri;
 };
 
 void apu_init(struct apu *apu);

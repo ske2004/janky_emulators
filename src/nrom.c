@@ -30,6 +30,9 @@ static void _nrom_mem_write(void *mem, uint16_t addr, uint8_t data)
         case 0x4005: apu_reg_write(&nrom->apu, APU_PULSE2_EPPP_NSSS, data); break;
         case 0x4006: apu_reg_write(&nrom->apu, APU_PULSE2_LLLL_LLLL, data); break;
         case 0x4007: apu_reg_write(&nrom->apu, APU_PULSE2_LLLL_LHHH, data); break;
+        case 0x4008: apu_reg_write(&nrom->apu, APU_TRIANG_CRRR_RRRR, data); break;
+        case 0x400A: apu_reg_write(&nrom->apu, APU_TRIANG_LLLL_LLLL, data); break;
+        case 0x400B: apu_reg_write(&nrom->apu, APU_TRIANG_LLLL_LHHH, data); break;
         case 0x4015: apu_reg_write(&nrom->apu, APU_STATUS_IFXD_NT21, data); break;
         case 0x4017: apu_reg_write(&nrom->apu, APU_STATUS_MIXX_XXXX, data); break; // misc
         case 0x4014: // OAMDMA
