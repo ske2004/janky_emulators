@@ -191,7 +191,18 @@ uint8_t apu_reg_read(struct apu *apu, enum apu_reg reg)
     return 0;
 }
 
-static uint8_t read_sample(struct apu *apu)
+static float do_high_pass_filter(struct apu_high_pass *high_pass, float sample)
+{
+    float rc = 1.0/(37.0*2*3.1415);
+    float dt = 1.0/44100.0;
+    float alpha = rc/(rc + dt);
+    float value = alpha * high_pass->last_out + alpha * (sample - high_pass->last_in);
+    high_pass->last_in = sample;
+    high_pass->last_out = value;
+    return value;
+}
+
+static int16_t read_sample(struct apu *apu)
 {   
     uint8_t pulse1 = 0;
 
@@ -229,17 +240,12 @@ static uint8_t read_sample(struct apu *apu)
     // i don't implement DMC (TODO)
     float tri_noise_dmc = 159.79/(1.0/((tri/8227.0)+(noise/12241.0))+100.0);
 
-    int sample = (pulse + tri_noise_dmc) * 255;
+    float value = do_high_pass_filter(&apu->high_pass, pulse + tri_noise_dmc);
 
-    if (sample < 0)
-    {
-        sample = 0;
-    }
+    if (value > 1.0) value = 1.0;
+    if (value < -1.0) value = -1.0;
 
-    if (sample > 255)
-    {
-        sample = 255;
-    }
+    int sample = value * 32766;
 
     return sample;
 }
@@ -478,13 +484,13 @@ static void frame_cycle(struct apu *apu)
     apu->frame_counter++;
 }
 
-void apu_ring_write(struct apu *apu, uint8_t value)
+void apu_ring_write(struct apu *apu, uint16_t value)
 {
     apu->sample_ring[apu->sample_ring_write_at++] = value;
     apu->sample_ring_write_at %= APU_SAMPLE_RING_LEN;
 }
 
-void apu_ring_read(struct apu *apu, uint8_t *dest, uint32_t count)
+void apu_ring_read(struct apu *apu, uint16_t *dest, uint32_t count)
 {
     int at = apu->sample_ring_read_at;
 

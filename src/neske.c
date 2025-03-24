@@ -122,9 +122,9 @@ void audio_callback(void *userdata, SDL_AudioStream *stream, int additional_amou
     // memcpy(buf, apu->samples, apu->samples_len);
     // apu->samples_len = 0;
     // 
-    uint8_t buf[2048];
+    uint16_t buf[16384];
     apu_ring_read(apu, buf, additional_amount);
-    SDL_PutAudioStreamData(stream, &buf, additional_amount);
+    SDL_PutAudioStreamData(stream, buf, additional_amount*2);
 }
 
 int main(int argc, char* argv[]) {
@@ -200,7 +200,7 @@ int main(int argc, char* argv[]) {
     SDL_AudioSpec audio_in = { 0 };
 
     audio_in.channels = 1;
-    audio_in.format = SDL_AUDIO_U8;
+    audio_in.format = SDL_AUDIO_S16;
     audio_in.freq = 44100;
 
     SDL_AudioDeviceID audio_device = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, NULL);

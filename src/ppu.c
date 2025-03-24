@@ -1,9 +1,23 @@
 #include "neske.h"
 #include <assert.h>
+#include <stdio.h>
 #include <string.h>
 
 uint16_t ppu_vram_map(struct ppu *ppu, uint16_t addr)
 {
+    if (addr >= 0x3F00 && addr <= 0x4000)
+    {
+        addr = 0x3F00 + (addr % 0x20);
+
+        // Pallete first index mirroring
+        if ((addr % 4) == 0)
+        {
+            addr = (addr & 0xF) | 0x3F00;
+        }
+
+        return addr;
+    }
+
     if (addr >= 0x2000 && addr < 0x3000)
     {
         if (ppu->mirroring_mode == PPUMIR_HOR)
@@ -105,9 +119,12 @@ void ppu_write(struct ppu *ppu, enum ppu_io io, uint8_t data)
             break;
         case PPUIO_DATA:
             ppu_vram_write(ppu, ppu_get_addr(ppu), data);
-            if (ppu->regs[PPUIR_CTRL] & (1 << 2)) {
+            if (ppu->regs[PPUIR_CTRL] & (1 << 2))
+            {
                 ppu_set_addr(ppu, ppu_get_addr(ppu)+32);
-            } else {
+            }
+            else
+            {
                 ppu_set_addr(ppu, ppu_get_addr(ppu)+1);
             }
             break;
@@ -140,9 +157,12 @@ uint8_t ppu_read(struct ppu *ppu, enum ppu_io io)
             {
                 uint8_t value = ppu->regs[PPUIR_DATA];
                 ppu->regs[PPUIR_DATA] = ppu_vram_read(ppu, ppu_get_addr(ppu));
-                if (ppu->regs[PPUIR_CTRL] & (1 << 2)) {
+                if (ppu->regs[PPUIR_CTRL] & (1 << 2))
+                {
                     ppu_set_addr(ppu, ppu_get_addr(ppu)+32);
-                } else {
+                }
+                else
+                {
                     ppu_set_addr(ppu, ppu_get_addr(ppu)+1);
                 }
                 return value;
@@ -223,8 +243,7 @@ void ppu_get_scroll(struct ppu *ppu, uint16_t *sx, uint16_t *sy)
 
 uint8_t ppu_get_pixel(struct ppu *ppu, int x, int y)
 {
-
-    uint8_t pixel = 0;
+    uint8_t pixel = 15;
     bool opaque = false;
 
     // Get tile pixel
@@ -253,8 +272,9 @@ uint8_t ppu_get_pixel(struct ppu *ppu, int x, int y)
         uint8_t hi = (ppu->vram[(uint16_t)tile*16+8+ty]>>(7-tx))&1;
         uint8_t palcoloridx = lo | (hi << 1);
         uint8_t palcolor = ppu->vram[0x3F00+palidx*4+palcoloridx];
-        if (palcoloridx == 0) {
-            palcolor = ppu->vram[0x3F10];
+        if (palcoloridx == 0)
+        {
+            palcolor = ppu->vram[0x3F00];
         }
 
         opaque = palcoloridx != 0;
@@ -306,7 +326,10 @@ uint8_t ppu_get_pixel(struct ppu *ppu, int x, int y)
                 }
                 
                 if (!(obj.attr & (1<<5) && opaque))
-                    pixel = palcolor;       
+                {
+                    pixel = palcolor;
+                    break;
+                }
             }
         else
             for (int o = 0; o < ppu->preload_objects_count; o++)

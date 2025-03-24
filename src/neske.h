@@ -257,6 +257,12 @@ struct apu_writer
 
 #define APU_SAMPLE_RING_LEN (16384)
 
+struct apu_high_pass
+{
+    float last_in;
+    float last_out;
+};
+
 struct apu
 {
     uint8_t flag_enable_interrupt;
@@ -269,7 +275,7 @@ struct apu
     uint32_t last_cps; // last cycle of sample output
     uint32_t cycles;
 
-    uint8_t sample_ring[APU_SAMPLE_RING_LEN];
+    int16_t sample_ring[APU_SAMPLE_RING_LEN];
     uint32_t sample_ring_write_at;
     uint32_t sample_ring_read_at;
     uint32_t samples_written_this_frame;
@@ -278,6 +284,8 @@ struct apu
     struct apu_pulse_chan pulse2;
     struct apu_tri_chan tri;
     struct apu_noise_chan noise;
+
+    struct apu_high_pass high_pass;
 };
 
 void apu_init(struct apu *apu);
@@ -285,7 +293,7 @@ void apu_reg_write(struct apu *apu, enum apu_reg reg, uint8_t value);
 uint8_t apu_reg_read(struct apu *apu, enum apu_reg reg);
 void apu_flush(struct apu *apu, void *dest, int count);
 void apu_cycle(struct apu *apu);
-void apu_ring_read(struct apu *apu, uint8_t *dest, uint32_t count);
+void apu_ring_read(struct apu *apu, uint16_t *dest, uint32_t count);
 
 // IMAP.H
 
