@@ -128,6 +128,18 @@ uint16_t nrom_get_vector(struct nrom *nrom, enum vector vec)
     return 0;
 }
 
+
+void nrom_reset(struct nrom *nrom)
+{
+    nrom->cpu = (struct ricoh_state){ 0 };
+    nrom->cpu.pc = nrom_get_vector(nrom, VEC_RESET);
+    nrom->cpu.flags = 0x24;
+    nrom->cpu.sp = 0xFD;
+    nrom->cpu.cycles = 7;
+    apu_init(&nrom->apu);
+}
+
+
 uint8_t nrom_load(uint8_t *ines, struct nrom *out)
 {
     if (!(ines[0] == 'N' && ines[1] == 'E' && ines[2] == 'S' && ines[3] == 0x1A))
@@ -135,29 +147,14 @@ uint8_t nrom_load(uint8_t *ines, struct nrom *out)
         return 1;
     }
 
-    *out = (struct nrom){ 0 };
-    out->prgsize = ines[4];
-    out->chrsize = ines[5];
-    out->controller_strobe = 8;
-
-    uint32_t prg_size = out->prgsize*(1<<14);
+    uint32_t prg_size = ines[4]*(1<<14);
 
     if (prg_size > 0x8000) 
     {
         return 2;
     }
 
-    out->decoder = make_ricoh_decoder();
-    
-    memcpy(out->memory+0x8000, ines+16, prg_size);
-
-    out->cpu = (struct ricoh_state){ 0 };
-    out->cpu.pc = nrom_get_vector(out, VEC_RESET);
-    out->cpu.flags = 0x24;
-    out->cpu.sp = 0xFD;
-    out->cpu.cycles = 7;
-
-    uint32_t chr_size = out->chrsize*(1<<13);
+    uint32_t chr_size = ines[5]*(1<<13);
 
     if (chr_size > 0x2000)
     {
@@ -165,8 +162,20 @@ uint8_t nrom_load(uint8_t *ines, struct nrom *out)
     }
 
     uint32_t mirroring = ines[6]&1;
-    
-    apu_init(&out->apu);
+    uint8_t mapper = (ines[6]>>4)|(ines[7]&0xF0);
+
+    if (mapper != 0)
+    {
+        return 4;
+    }
+ 
+    *out = (struct nrom){ 0 };
+    out->decoder = make_ricoh_decoder();
+    memcpy(out->memory+0x8000, ines+16, prg_size);
+    out->prgsize = ines[4];
+    out->chrsize = ines[5];
+    out->controller_strobe = 8;
+    nrom_reset(out);
     out->ppu = ppu_mk(mirroring ? PPUMIR_VER : PPUMIR_HOR);
     ppu_write_chr(&out->ppu, ines+16+prg_size, chr_size);
 

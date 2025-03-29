@@ -379,5 +379,6 @@ void nrom_update_controller(struct nrom *nrom, struct controller_state cs);
 uint8_t nrom_load(uint8_t *ines, struct nrom *out);
 struct ricoh_mem_interface nrom_get_memory_interface(struct nrom *nrom);
 struct nrom_frame_result nrom_frame(struct nrom *nrom);
+void nrom_reset(struct nrom *nrom);
 
 #endif
