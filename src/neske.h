@@ -55,6 +55,8 @@ struct ricoh_state
     uint16_t pc;
     uint8_t a, x, y, sp, flags;
     uint32_t cycles;
+
+    uint8_t crash;
 };
 
 struct ricoh_mem_interface
@@ -278,7 +280,8 @@ struct apu
     int16_t sample_ring[APU_SAMPLE_RING_LEN];
     uint32_t sample_ring_write_at;
     uint32_t sample_ring_read_at;
-    uint32_t samples_written_this_frame;
+    uint32_t samples_written;
+    uint32_t samples_read;
 
     struct apu_pulse_chan pulse1;
     struct apu_pulse_chan pulse2;
@@ -294,6 +297,8 @@ uint8_t apu_reg_read(struct apu *apu, enum apu_reg reg);
 void apu_flush(struct apu *apu, void *dest, int count);
 void apu_cycle(struct apu *apu);
 void apu_ring_read(struct apu *apu, uint16_t *dest, uint32_t count);
+void apu_catchup_cycles(struct apu *apu, uint32_t cycles);
+void apu_catchup_samples(struct apu *apu, uint32_t samples_added);
 
 // IMAP.H
 
@@ -313,6 +318,14 @@ struct imap
 struct imap *imap_mk();
 void imap_populate(struct imap *imap, struct ricoh_decoder *decoder, struct ricoh_mem_interface *mem, uint16_t entry);
 void imap_list_range(struct imap *imap, uint16_t entry, struct print_instr **dest, int from, int to);
+
+// MUX.H
+
+struct mux_api {
+    void *mux;
+    void (*lock)(void *mux);
+    void (*unlock)(void *mux);
+};
 
 // NROM.H
 
@@ -346,7 +359,8 @@ struct nrom
     struct ricoh_state cpu;
     struct ppu ppu;
     struct apu apu;
-    
+    struct mux_api apu_mux;
+
     struct controller_state controller;
     uint8_t controller_strobe;
 

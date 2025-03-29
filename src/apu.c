@@ -539,6 +539,26 @@ void apu_cycle(struct apu *apu)
     {
         apu->last_cps = cps_treshold;
         apu_ring_write(apu, read_sample(apu));
-        apu->samples_written_this_frame++;
+        apu->samples_written++;
     }  
 }
+
+// TODO: Not used, because still creates delayed and choppy sound if too
+//       much samples submitted, this solution sacrifices accuracy ;-;
+void apu_catchup_cycles(struct apu *apu, uint32_t cycles)
+{
+    while (apu->cycles < cycles)
+    {
+        apu_cycle(apu);
+    }
+}
+
+void apu_catchup_samples(struct apu *apu, uint32_t samples_added)
+{
+    while (apu->samples_written < samples_added)
+    {
+        apu_cycle(apu);
+    }
+    apu->samples_written = 0;
+}
+

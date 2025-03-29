@@ -236,9 +236,13 @@ void ppu_get_scroll(struct ppu *ppu, uint16_t *sx, uint16_t *sy)
           (ppu->x&((1<<3)-1))) +        // Fine xxx
           ((ppu->t&(1<<10)) ? 256 : 0); // Nametable select
 
-    *sy = ((((ppu->t>>5)&((1<<5)-1))<<3) | // YYYYY
-          ((ppu->t>>12)&((1<<3)-1))) +     // Fine yyy
-          ((ppu->t&(1<<11)) ? 240 : 0);    // Nametable select
+    *sy = (((ppu->t>>5)&((1<<5)-1))<<3) | // YYYYY
+          ((ppu->t>>12)&((1<<3)-1))       // Fine yyy
+          ;
+
+    // temp hack for binary land to work
+    if (*sy >= 240) *sy += 240-16;
+    *sy += ((ppu->t&(1<<11)) ? 240 : 0);
 }
 
 uint8_t ppu_get_pixel(struct ppu *ppu, int x, int y)
@@ -249,7 +253,7 @@ uint8_t ppu_get_pixel(struct ppu *ppu, int x, int y)
     // Get tile pixel
     if (ppu->regs[PPUIR_MASK]&(1<<3))
     {
-        uint16_t scroll_x, scroll_y;
+        uint16_t scroll_x = 0, scroll_y = 0;
         ppu_get_scroll(ppu, &scroll_x, &scroll_y);
 
         int sx = (x + scroll_x);
@@ -394,6 +398,10 @@ bool ppu_cycle(struct ppu *ppu, struct ricoh_mem_interface *mem)
 
     if (ppu->beam > 340)
     {
+        if (ppu->scanline == 240) {
+            ppu_vblank(ppu);
+            nmi_occured = true;
+        }
         ppu->scanline += 1;
         ppu->beam = 0;
         ppu->preload_objects_count = 0;
@@ -443,11 +451,7 @@ bool ppu_cycle(struct ppu *ppu, struct ricoh_mem_interface *mem)
     }
     else if (ppu->scanline == 240)
     {
-        if (ppu->beam == 0)
-        {
-            ppu_vblank(ppu);
-            nmi_occured = true;
-        }
+        // idle
     }
     else if (ppu->scanline > 240 && ppu->scanline <= 260)
     {

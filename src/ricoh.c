@@ -539,9 +539,8 @@ void ricoh_run_instr(
         case BRK:
             printf("REGISTER DUMP: A=%02X X=%02X Y=%02X F=%02X P=%04X\n", (unsigned int)cpu->a, (unsigned int)cpu->x, (unsigned int)cpu->y, (unsigned int)cpu->flags, (unsigned int)cpu->pc);
             printf("RESULTS: %2X %2X\n", read_8(cpu, mem, 2), read_8(cpu, mem, 3));
-
             fflush(stdout);
-            assert(false && "what do");
+            cpu->crash = 1;
             break;
         case BVC:
             do_reljump(cpu, instr, getflag(cpu, FLAG_OFW) == false);

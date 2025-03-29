@@ -1,11 +1,15 @@
 #include <stdio.h>
 #include "SDL3/SDL_audio.h"
+#include "SDL3/SDL_error.h"
+#include "SDL3/SDL_image.h"
 #include "SDL3/SDL_keycode.h"
+#include "SDL3/SDL_mutex.h"
 #include "SDL3/SDL_oldnames.h"
 #include "SDL3/SDL_rect.h"
 #include "SDL3/SDL_render.h"
 #include "SDL3/SDL_surface.h"
 #include <SDL3/SDL.h>
+#include "SDL3/SDL_video.h"
 #include "font8x8.h"
 #include "neske.h"
 
@@ -114,18 +118,49 @@ void ui_draw_item(struct ui_draw *it, SDL_FRect rect, bool hover)
 
 void audio_callback(void *userdata, SDL_AudioStream *stream, int additional_amount, int total_amount)
 {
-    struct apu *apu = userdata;
-    // uint8_t buf[2048] = { 0 };
-    // uint32_t count = apu->samples_len;
+    struct nrom *nrom = userdata;
+    struct apu *apu = &nrom->apu;
 
-    // // printf("%d\n", count);
-    // memcpy(buf, apu->samples, apu->samples_len);
-    // apu->samples_len = 0;
-    // 
     uint16_t buf[16384];
-    apu_ring_read(apu, buf, additional_amount);
-    SDL_PutAudioStreamData(stream, buf, additional_amount*2);
+
+
+    nrom->apu_mux.lock(nrom->apu_mux.mux);
+    apu->samples_read += additional_amount/2;
+    apu_catchup_samples(apu, additional_amount/2);
+    apu_ring_read(apu, buf, additional_amount/2);
+    nrom->apu_mux.unlock(nrom->apu_mux.mux);
+    SDL_PutAudioStreamData(stream, buf, additional_amount);
 }
+
+void sdl_mux_lock( void *mux )
+{
+    SDL_LockMutex(mux);
+}
+
+void sdl_mux_unlock( void *mux )
+{
+    SDL_UnlockMutex(mux);
+}
+
+struct mux_api sdl_mux_make()
+{
+    return (struct mux_api) {
+        SDL_CreateMutex(),
+        sdl_mux_lock,
+        sdl_mux_unlock,
+    };
+}
+
+SDL_HitTestResult hit_test(SDL_Window* win, const SDL_Point* pos, void *userdata)
+{
+    bool hit = pos->y < 12*3 && pos->x > 110*3 && pos->x < 233*3;
+
+    return hit ? SDL_HITTEST_DRAGGABLE : SDL_HITTEST_NORMAL;
+}
+
+struct neske_ui {
+    SDL_Texture *menu;
+};
 
 int main(int argc, char* argv[]) {
     if (argc != 2)
@@ -162,10 +197,11 @@ int main(int argc, char* argv[]) {
     // Create an application window with the following settings:
     window = SDL_CreateWindow(
         "neske",                           // window title
-        256*4,                               // width, in pixels
-        240*3,                               // height, in pixels
-        SDL_WINDOW_OPENGL  // flags - see below
+        258*3,                               // width, in pixels
+        254*3,                               // height, in pixels
+        SDL_WINDOW_OPENGL | SDL_WINDOW_BORDERLESS
     );
+    SDL_SetWindowHitTest(window, hit_test, NULL);
 
     if (window == NULL)
     {
@@ -181,6 +217,20 @@ int main(int argc, char* argv[]) {
         SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Could not create renderer: %s\n", SDL_GetError());
         return 1;
     }
+
+    SDL_Texture *menu = IMG_LoadTexture(renderer, "menu.png");
+    SDL_Texture *ctx_file = IMG_LoadTexture(renderer, "ctx_file.png");
+    SDL_Texture *select = IMG_LoadTexture(renderer, "crash.png");
+
+    SDL_SetTextureScaleMode(menu, SDL_SCALEMODE_NEAREST);
+    SDL_SetTextureScaleMode(select, SDL_SCALEMODE_NEAREST);
+    SDL_SetTextureScaleMode(ctx_file, SDL_SCALEMODE_NEAREST);
+
+    if (!menu) 
+    {
+        fprintf(stderr, "%s", SDL_GetError());
+    }
+
     
     uint32_t texture[240*256];
     SDL_Surface *surface = SDL_CreateSurface(256, 240, SDL_PIXELFORMAT_RGBA8888);
@@ -192,10 +242,9 @@ int main(int argc, char* argv[]) {
     imap_populate(imap, &nrom.decoder, &mem, nrom_get_vector(&nrom, VEC_RESET));
     imap_populate(imap, &nrom.decoder, &mem, nrom_get_vector(&nrom, VEC_IRQ));
 
-    SDL_SetRenderScale(renderer, 2, 2);
+    SDL_SetRenderScale(renderer, 3, 3);
 
     struct controller_state controller = { 0 };
-
 
     SDL_AudioSpec audio_in = { 0 };
 
@@ -204,11 +253,13 @@ int main(int argc, char* argv[]) {
     audio_in.freq = 44100;
 
     SDL_AudioDeviceID audio_device = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, NULL);
-    SDL_AudioStream *audio_device_stream = SDL_OpenAudioDeviceStream(audio_device, &audio_in, audio_callback, &nrom.apu);
+    SDL_AudioStream *audio_device_stream = SDL_OpenAudioDeviceStream(audio_device, &audio_in, audio_callback, &nrom);
+    
+    SDL_ResumeAudioStreamDevice(audio_device_stream);
+
+    nrom.apu_mux = sdl_mux_make();
 
     nrom_frame(&nrom);
-
-    SDL_ResumeAudioStreamDevice(audio_device_stream);
 
     while (!done) {
         struct nrom_frame_result result = nrom_frame(&nrom);
@@ -256,9 +307,11 @@ int main(int argc, char* argv[]) {
 
         SDL_FRect srcf = {0, 0, 128*8, 8};
         SDL_FRect src = {0, 0, 256, 240};
-        SDL_FRect dst = {0, 0, 256, 240};
+        SDL_FRect dst = {1, 13, 256, 240};
         SDL_RenderTexture(renderer, sdltexture, &src, &dst);
 
+
+#if 0
         // for (int x = 0; x < 8; x++)
         // {
         //     for (int y = 0; y < 8; y++)
@@ -293,6 +346,13 @@ int main(int argc, char* argv[]) {
                 ui_draw_text(&uidraw, s, (SDL_Point){256, 10+i*8}, 1);
             }
         }
+#endif
+        SDL_FRect dest = {1, 13, 256, 240};
+        if (nrom.cpu.crash) {
+            SDL_RenderTexture(renderer, select, NULL, &dest);
+        }
+        SDL_RenderTexture(renderer, menu, NULL, NULL);
+        SDL_RenderTexture(renderer, ctx_file, NULL, NULL);
 
         SDL_RenderPresent(renderer);
         

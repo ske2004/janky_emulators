@@ -4,13 +4,20 @@
 #include <stdio.h>
 #include "neske.h"
 
+static void apu_write_catchup(struct nrom *nrom, enum apu_reg reg, uint8_t val)
+{
+    nrom->apu_mux.lock(nrom->apu_mux.mux);
+    apu_reg_write(&nrom->apu, reg, val);
+    nrom->apu_mux.unlock(nrom->apu_mux.mux);
+}
+
 static void _nrom_mem_write(void *mem, uint16_t addr, uint8_t data)
 {
     struct nrom *nrom = mem;
 
     if (addr >= 0x2000 && addr < 0x4000)
     {
-        addr = 0x2000 + ((addr-0x2000)%8);
+        addr = 0x2000 + addr % 8;
     }
 
     switch (addr)
@@ -23,22 +30,22 @@ static void _nrom_mem_write(void *mem, uint16_t addr, uint8_t data)
         case 0x2006: ppu_write(&nrom->ppu, PPUIO_ADDR, data); break;
         case 0x2007: ppu_write(&nrom->ppu, PPUIO_DATA, data); break;
 
-        case 0x4000: apu_reg_write(&nrom->apu, APU_PULSE1_DDLC_NNNN, data); break; // pulse 1
-        case 0x4001: apu_reg_write(&nrom->apu, APU_PULSE1_EPPP_NSSS, data); break;
-        case 0x4002: apu_reg_write(&nrom->apu, APU_PULSE1_LLLL_LLLL, data); break;
-        case 0x4003: apu_reg_write(&nrom->apu, APU_PULSE1_LLLL_LHHH, data); break; 
-        case 0x4004: apu_reg_write(&nrom->apu, APU_PULSE2_DDLC_NNNN, data); break; // pulse 2
-        case 0x4005: apu_reg_write(&nrom->apu, APU_PULSE2_EPPP_NSSS, data); break;
-        case 0x4006: apu_reg_write(&nrom->apu, APU_PULSE2_LLLL_LLLL, data); break;
-        case 0x4007: apu_reg_write(&nrom->apu, APU_PULSE2_LLLL_LHHH, data); break;
-        case 0x4008: apu_reg_write(&nrom->apu, APU_TRIANG_CRRR_RRRR, data); break; // triangle
-        case 0x400A: apu_reg_write(&nrom->apu, APU_TRIANG_LLLL_LLLL, data); break;
-        case 0x400B: apu_reg_write(&nrom->apu, APU_TRIANG_LLLL_LHHH, data); break;
-        case 0x400C: apu_reg_write(&nrom->apu, APU_NOISER_XXLC_VVVV, data); break; // noise
-        case 0x400E: apu_reg_write(&nrom->apu, APU_NOISER_MXXX_PPPP, data); break;
-        case 0x400F: apu_reg_write(&nrom->apu, APU_NOISER_LLLL_LXXX, data); break;
-        case 0x4015: apu_reg_write(&nrom->apu, APU_STATUS_IFXD_NT21, data); break; // status
-        case 0x4017: apu_reg_write(&nrom->apu, APU_STATUS_MIXX_XXXX, data); break; // misc
+        case 0x4000: apu_write_catchup(nrom, APU_PULSE1_DDLC_NNNN, data); break; // pulse 1
+        case 0x4001: apu_write_catchup(nrom, APU_PULSE1_EPPP_NSSS, data); break;
+        case 0x4002: apu_write_catchup(nrom, APU_PULSE1_LLLL_LLLL, data); break;
+        case 0x4003: apu_write_catchup(nrom, APU_PULSE1_LLLL_LHHH, data); break; 
+        case 0x4004: apu_write_catchup(nrom, APU_PULSE2_DDLC_NNNN, data); break; // pulse 2
+        case 0x4005: apu_write_catchup(nrom, APU_PULSE2_EPPP_NSSS, data); break;
+        case 0x4006: apu_write_catchup(nrom, APU_PULSE2_LLLL_LLLL, data); break;
+        case 0x4007: apu_write_catchup(nrom, APU_PULSE2_LLLL_LHHH, data); break;
+        case 0x4008: apu_write_catchup(nrom, APU_TRIANG_CRRR_RRRR, data); break; // triangle
+        case 0x400A: apu_write_catchup(nrom, APU_TRIANG_LLLL_LLLL, data); break;
+        case 0x400B: apu_write_catchup(nrom, APU_TRIANG_LLLL_LHHH, data); break;
+        case 0x400C: apu_write_catchup(nrom, APU_NOISER_XXLC_VVVV, data); break; // noise
+        case 0x400E: apu_write_catchup(nrom, APU_NOISER_MXXX_PPPP, data); break;
+        case 0x400F: apu_write_catchup(nrom, APU_NOISER_LLLL_LXXX, data); break;
+        case 0x4015: apu_write_catchup(nrom, APU_STATUS_IFXD_NT21, data); break; // status
+        case 0x4017: apu_write_catchup(nrom, APU_STATUS_MIXX_XXXX, data); break; // misc
 
         case 0x4014: // OAMDMA
             ppu_write_oam(&nrom->ppu, nrom->memory + (((uint16_t)data)<<8));
@@ -74,12 +81,19 @@ static uint8_t _nrom_mem_read(void *mem, uint16_t addr)
         addr = 0x2000  +((addr-0x2000)%8);
     }
 
+    uint8_t val = 0;
+
     switch (addr)
     {
         case 0x2002: return ppu_read(&nrom->ppu, PPUIO_STATUS);
         case 0x2004: return ppu_read(&nrom->ppu, PPUIO_OAMDATA);
         case 0x2007: return ppu_read(&nrom->ppu, PPUIO_DATA);
-        case 0x4015: return apu_reg_read(&nrom->apu, APU_STATUS_IFXD_NT21); break;
+        case 0x4015:
+            nrom->apu_mux.lock(nrom->apu_mux.mux);
+            val = apu_reg_read(&nrom->apu, APU_STATUS_IFXD_NT21);
+            nrom->apu_mux.unlock(nrom->apu_mux.mux);
+            return val;
+            break;
         case 0x4017:
             return 0; // controller, not apu, confusing ya
         case 0x4016:
@@ -170,31 +184,23 @@ struct ricoh_mem_interface nrom_get_memory_interface(struct nrom *nrom)
 
 enum {
     DEV_CPU,
-    DEV_APU,
     DEV_PPU,
 };
 
 struct nrom_frame_result nrom_frame(struct nrom *nrom)
 {
-    nrom->apu.samples_written_this_frame = 0;
-
     struct ricoh_mem_interface mem = nrom_get_memory_interface(nrom);
 
-    while (true)
+    while (!nrom->cpu.crash)
     {
         bool nmi_occured = false;
 
         int dev = DEV_CPU;
         int devc = nrom->cpu.cycles;
 
-        if (devc >= nrom->ppu.cycles/3) {
+        if (devc*3 >= nrom->ppu.cycles) {
             devc = nrom->ppu.cycles/3;
             dev = DEV_PPU;
-        }
-
-        if (devc >= nrom->apu.cycles) {
-            devc = nrom->apu.cycles;
-            dev = DEV_APU;
         }
 
         switch (dev)
@@ -203,11 +209,6 @@ struct nrom_frame_result nrom_frame(struct nrom *nrom)
             {
                 struct instr_decoded decoded = ricoh_decode_instr(&nrom->decoder, &mem, nrom->cpu.pc);
                 ricoh_run_instr(&nrom->cpu, decoded, &mem);
-            }
-            break;
-        case DEV_APU:
-            {
-                apu_cycle(&nrom->apu);
             }
             break;
         case DEV_PPU:
@@ -228,8 +229,6 @@ struct nrom_frame_result nrom_frame(struct nrom *nrom)
     }
 
     struct nrom_frame_result result = { 0 };
-
-    // printf("%d\n", nrom->apu.sample_ring_write_at);
 
     memcpy(result.screen, nrom->ppu.screen, sizeof result.screen);
 
