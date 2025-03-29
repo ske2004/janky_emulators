@@ -8,6 +8,7 @@
 #include "SDL3/SDL_keycode.h"
 #include "SDL3/SDL_log.h"
 #include "SDL3/SDL_messagebox.h"
+#include "SDL3/SDL_misc.h"
 #include "SDL3/SDL_mouse.h"
 #include "SDL3/SDL_mutex.h"
 #include "SDL3/SDL_oldnames.h"
@@ -173,20 +174,16 @@ bool load_rom_from_file(const char *path, struct nrom *nrom)
     fread(rom, 1, fsize, fp);
     fclose(fp);
 
-    if (!nrom->apu_mux.mux)
+    if (fsize < 16)
     {
-        nrom->apu_mux = sdl_mux_make();
-    }
-    struct mux_api mux = nrom->apu_mux;
-
-    if (nrom_load(rom, nrom))
-    {
-        nrom->apu_mux = mux;
-        show_error("Error loading ROM:", "Invalid ROM or I don't support that mapper oops", false);
         return false;
     }
 
-    nrom->apu_mux = mux;
+    if (nrom_load(rom, nrom))
+    {
+        show_error("Error loading ROM:", "Invalid ROM or I don't support that mapper oops", false);
+        return false;
+    }
 
     return true;
 }
@@ -197,20 +194,24 @@ struct neske_ui
     SDL_Renderer *renderer;
     SDL_Window *window;
     SDL_Mutex *mutex;
-    
+
     bool emulating;
     bool error;
     bool crash;
     bool mouse_released;
     bool ctx_file;
 
+    struct controller_state controller;
     SDL_Texture *tex_backbuffer;
 
+    SDL_Cursor *cursor;
     SDL_Texture *tex_menu;
     SDL_Texture *tex_select;
     SDL_Texture *tex_error;
     SDL_Texture *tex_crash;
     SDL_Texture *tex_ctx_file;
+    SDL_Texture *tex_config;
+    SDL_Texture *tex_userfont;
 };
 
 struct SDL_Texture *load_ui_texture(SDL_Renderer *renderer, const char *path)
@@ -235,13 +236,31 @@ struct neske_ui neske_ui_init(SDL_Renderer *renderer, SDL_Window *window, struct
     ui.window = window;
     ui.nrom = nrom;
 
-    ui.tex_menu = load_ui_texture(renderer, "menu.png");
-    ui.tex_select = load_ui_texture(renderer, "select.png");
-    ui.tex_error = load_ui_texture(renderer, "error.png");
-    ui.tex_crash = load_ui_texture(renderer, "crash.png");
-    ui.tex_ctx_file = load_ui_texture(renderer, "ctx_file.png");
+    ui.tex_menu = load_ui_texture(renderer, "img/menu.png");
+    ui.tex_select = load_ui_texture(renderer, "img/select.png");
+    ui.tex_error = load_ui_texture(renderer, "img/error.png");
+    ui.tex_crash = load_ui_texture(renderer, "img/crash.png");
+    ui.tex_ctx_file = load_ui_texture(renderer, "img/ctx_file.png");
+    ui.tex_config = load_ui_texture(renderer, "img/config.png");
+    ui.tex_userfont = load_ui_texture(renderer, "img/userfont.png");
     ui.tex_backbuffer = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, 256, 240);
     SDL_SetTextureScaleMode(ui.tex_backbuffer, SDL_SCALEMODE_NEAREST);
+
+    SDL_Surface *cursor_surface = IMG_Load("img/cursor.png");
+    if (!cursor_surface)
+    {
+        SDL_LogError(0, "Can't open image: %s %s", "img/cursor.png", SDL_GetError());
+        exit(1);
+    }
+
+    SDL_Surface *cursor_surface_2 = SDL_ScaleSurface(cursor_surface, cursor_surface->w*3, cursor_surface->h*3, SDL_SCALEMODE_NEAREST);
+
+    ui.cursor = SDL_CreateColorCursor(cursor_surface_2, 2, 1);
+
+    SDL_SetCursor(ui.cursor);
+    
+    SDL_DestroySurface(cursor_surface);
+    SDL_DestroySurface(cursor_surface_2);
 
     return ui;
 }
@@ -283,16 +302,32 @@ bool draw_widget(struct neske_ui *ui, const char *name, int x, int y, int w, int
 
 bool neske_ui_event(struct neske_ui *ui, SDL_Event *event)
 {
+    SDL_LockMutex(ui->mutex);
+
     switch (event->type)
     {
     case SDL_EVENT_MOUSE_BUTTON_UP:
-        if (event->button.button == SDL_BUTTON_LEFT) {
-            ui->mouse_released = true;
-            return true;
-        }
+        if (event->button.button == SDL_BUTTON_LEFT) ui->mouse_released = true;
+        case SDL_EVENT_KEY_DOWN:
+        case SDL_EVENT_KEY_UP:
+            if (event->key.key == SDLK_X) ui->controller.btns[BTN_A] = event->type == SDL_EVENT_KEY_DOWN;
+            if (event->key.key == SDLK_Z) ui->controller.btns[BTN_B] = event->type == SDL_EVENT_KEY_DOWN;
+            if (event->key.key == SDLK_RETURN) ui->controller.btns[BTN_START] = event->type == SDL_EVENT_KEY_DOWN;
+            if (event->key.key == SDLK_TAB) ui->controller.btns[BTN_SELECT] = event->type == SDL_EVENT_KEY_DOWN;
+            if (event->key.key == SDLK_UP) ui->controller.btns[BTN_UP] = event->type == SDL_EVENT_KEY_DOWN;
+            if (event->key.key == SDLK_DOWN) ui->controller.btns[BTN_DOWN] = event->type == SDL_EVENT_KEY_DOWN;
+            if (event->key.key == SDLK_LEFT) ui->controller.btns[BTN_LEFT] = event->type == SDL_EVENT_KEY_DOWN;
+            if (event->key.key == SDLK_RIGHT) ui->controller.btns[BTN_RIGHT] = event->type == SDL_EVENT_KEY_DOWN;
+            if (ui->emulating)
+            {
+                nrom_update_controller(ui->nrom, ui->controller);
+            }
+            break;
     }
+    
+    SDL_UnlockMutex(ui->mutex);
 
-    return false;
+    return true;
 }
 
 static void SDLCALL on_rom_open(void *userdata, const char *const *filelist, int filter)
@@ -326,6 +361,8 @@ static void SDLCALL on_rom_open(void *userdata, const char *const *filelist, int
 
 void neske_ui_update(struct neske_ui *ui)
 {
+    SDL_LockMutex(ui->mutex);
+
     if (ui->crash)
     {
         SDL_RenderTexture(ui->renderer, ui->tex_crash, NULL, &(SDL_FRect){1, 13, 256, 240});
@@ -333,16 +370,18 @@ void neske_ui_update(struct neske_ui *ui)
     else if (ui->error)
     {
         SDL_RenderTexture(ui->renderer, ui->tex_error, NULL, &(SDL_FRect){1, 13, 256, 240});
+        if (draw_widget(ui, "List", 56, 196+13, 143, 12))
+        {
+            SDL_OpenURL("https://nesdir.github.io/mapper0.html");
+        }
     }
     else if (ui->emulating)
     {
-        SDL_LockMutex(ui->mutex);
         draw_nes_emu(ui->renderer, ui->tex_backbuffer, nrom_frame(ui->nrom));
         if (ui->nrom->cpu.crash)
         {
             ui->crash = true;
         }
-        SDL_UnlockMutex(ui->mutex);
     }
     else
     {
@@ -367,11 +406,13 @@ void neske_ui_update(struct neske_ui *ui)
 
         if (draw_widget(ui, "Unload ROM", 1, 25, 47, 11))
         {
+            nrom_reset(ui->nrom);
             ui->emulating = false;
         }
 
         if (draw_widget(ui, "Reset", 1, 37, 47, 11))
         {
+            printf("Reset\n");
             ui->crash = false;
             nrom_reset(ui->nrom);
         }
@@ -385,7 +426,22 @@ void neske_ui_update(struct neske_ui *ui)
     {
         ui->ctx_file = false;
     }
+
+    if (draw_widget(ui, "Config", 26, 1, 32, 11))
+    {
     
+    }
+    
+    if (draw_widget(ui, "About", 59, 1, 29, 11))
+    {
+    
+    }
+
+    if (draw_widget(ui, "Fun", 89, 1, 21, 11))
+    {
+    
+    }
+
     if (draw_widget(ui, "X", 246, 1, 11, 11))
     {
         exit(0);
@@ -396,20 +452,14 @@ void neske_ui_update(struct neske_ui *ui)
         SDL_MinimizeWindow(ui->window);
     }
 
-
     ui->mouse_released = false;
+
+    SDL_UnlockMutex(ui->mutex);
 }
 
 void audio_callback(void *userdata, SDL_AudioStream *stream, int additional_amount, int total_amount)
 {
-    struct neske_ui *neske_ui = userdata;
-    // TODO? can have race condition? idk
-    if (!neske_ui->emulating)
-    {
-        return;
-    }
-
-    struct nrom *nrom = neske_ui->nrom;
+    struct nrom *nrom = userdata;
     struct apu *apu = &nrom->apu;
 
     uint16_t buf[16384];
@@ -424,12 +474,6 @@ void audio_callback(void *userdata, SDL_AudioStream *stream, int additional_amou
 
 
 int main(int argc, char* argv[]) {
-    if (argc != 2)
-    {
-        fprintf(stderr, "Usage: %s <NES ROM>\n", argv[0]);
-        return 1;
-    }
-
     struct nrom nrom = { 0 };
     SDL_Window *window;                    // Declare a pointer
     SDL_Renderer *renderer;
@@ -463,10 +507,6 @@ int main(int argc, char* argv[]) {
     }
     
     struct ui_draw uidraw = ui_draw_mk(renderer);
-
-    bool show = true;
-    struct controller_state controller = { 0 };
-
     SDL_AudioSpec audio_in = { 0 };
 
     audio_in.channels = 1;
@@ -477,40 +517,24 @@ int main(int argc, char* argv[]) {
 
     SDL_SetRenderScale(renderer, 3, 3);
 
+    nrom.apu_mux = sdl_mux_make();
     struct neske_ui neske_ui = neske_ui_init(renderer, window, &nrom);
-    SDL_AudioStream *audio_device_stream = SDL_OpenAudioDeviceStream(audio_device, &audio_in, audio_callback, &neske_ui);
+    SDL_AudioStream *audio_device_stream = SDL_OpenAudioDeviceStream(audio_device, &audio_in, audio_callback, &nrom);
     SDL_ResumeAudioStreamDevice(audio_device_stream);
 
     while (!done) {
         SDL_Event event;
 
         while (SDL_PollEvent(&event)) {
-            if (neske_ui_event(&neske_ui, &event))
+            if (event.type == SDL_EVENT_QUIT)
             {
+                done = true;
                 continue;
             }
 
-            switch (event.type)
+            if (neske_ui_event(&neske_ui, &event))
             {
-            case SDL_EVENT_QUIT:
-                done = true;
-                break;
-            case SDL_EVENT_KEY_DOWN:
-            case SDL_EVENT_KEY_UP:
-                show = false;
-                if (event.key.key == SDLK_X) controller.btns[BTN_A] = event.type == SDL_EVENT_KEY_DOWN;
-                if (event.key.key == SDLK_Z) controller.btns[BTN_B] = event.type == SDL_EVENT_KEY_DOWN;
-                if (event.key.key == SDLK_RETURN) controller.btns[BTN_START] = event.type == SDL_EVENT_KEY_DOWN;
-                if (event.key.key == SDLK_TAB) controller.btns[BTN_SELECT] = event.type == SDL_EVENT_KEY_DOWN;
-                if (event.key.key == SDLK_UP) controller.btns[BTN_UP] = event.type == SDL_EVENT_KEY_DOWN;
-                if (event.key.key == SDLK_DOWN) controller.btns[BTN_DOWN] = event.type == SDL_EVENT_KEY_DOWN;
-                if (event.key.key == SDLK_LEFT) controller.btns[BTN_LEFT] = event.type == SDL_EVENT_KEY_DOWN;
-                if (event.key.key == SDLK_RIGHT) controller.btns[BTN_RIGHT] = event.type == SDL_EVENT_KEY_DOWN;
-                if (neske_ui.emulating)
-                {
-                    nrom_update_controller(&nrom, controller);
-                }
-                break;
+                continue;
             }
         }
 

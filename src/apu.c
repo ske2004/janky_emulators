@@ -521,13 +521,13 @@ void apu_cycle(struct apu *apu)
     tri_clock(&apu->tri);
 
     // dats cycles per frame
-    uint32_t cpf = 1789773 / 240;
-    uint32_t cpf_treshold = apu->last_cpf + cpf;
+    uint64_t cpf = 1789773 / 240;
+    uint64_t cpf_treshold = apu->last_cpf + cpf;
     
     // this is cycles per sample
     // 44.1 khz for the target sample
-    uint32_t cps = 1789773 / 44100;
-    uint32_t cps_treshold = apu->last_cps + cps;
+    uint64_t cps = 1789773 / 44100;
+    uint64_t cps_treshold = apu->last_cps + cps;
 
     if (apu->cycles > cpf_treshold)
     {
@@ -545,7 +545,7 @@ void apu_cycle(struct apu *apu)
 
 // TODO: Not used, because still creates delayed and choppy sound if too
 //       much samples submitted, this solution sacrifices accuracy ;-;
-void apu_catchup_cycles(struct apu *apu, uint32_t cycles)
+void apu_catchup_cycles(struct apu *apu, uint64_t cycles)
 {
     while (apu->cycles < cycles)
     {

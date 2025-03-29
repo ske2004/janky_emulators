@@ -136,12 +136,15 @@ void nrom_reset(struct nrom *nrom)
     nrom->cpu.flags = 0x24;
     nrom->cpu.sp = 0xFD;
     nrom->cpu.cycles = 7;
+    nrom->apu = (struct apu){ 0 };
     apu_init(&nrom->apu);
 }
 
 
 uint8_t nrom_load(uint8_t *ines, struct nrom *out)
 {
+    struct mux_api mux = out->apu_mux;
+
     if (!(ines[0] == 'N' && ines[1] == 'E' && ines[2] == 'S' && ines[3] == 0x1A))
     {
         return 1;
@@ -168,8 +171,10 @@ uint8_t nrom_load(uint8_t *ines, struct nrom *out)
     {
         return 4;
     }
- 
+    
+    mux.lock(mux.mux);
     *out = (struct nrom){ 0 };
+    out->apu_mux = mux;
     out->decoder = make_ricoh_decoder();
     memcpy(out->memory+0x8000, ines+16, prg_size);
     out->prgsize = ines[4];
@@ -178,6 +183,7 @@ uint8_t nrom_load(uint8_t *ines, struct nrom *out)
     nrom_reset(out);
     out->ppu = ppu_mk(mirroring ? PPUMIR_VER : PPUMIR_HOR);
     ppu_write_chr(&out->ppu, ines+16+prg_size, chr_size);
+    mux.unlock(mux.mux);
 
     return 0;
 }
@@ -200,12 +206,14 @@ struct nrom_frame_result nrom_frame(struct nrom *nrom)
 {
     struct ricoh_mem_interface mem = nrom_get_memory_interface(nrom);
 
-    while (!nrom->cpu.crash)
+    uint64_t cycles_start = nrom->cpu.cycles;
+
+    while (!nrom->cpu.crash && (nrom->cpu.cycles-cycles_start) < 500000)
     {
         bool nmi_occured = false;
 
         int dev = DEV_CPU;
-        int devc = nrom->cpu.cycles;
+        uint64_t devc = nrom->cpu.cycles;
 
         if (devc*3 >= nrom->ppu.cycles) {
             devc = nrom->ppu.cycles/3;

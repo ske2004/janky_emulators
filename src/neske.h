@@ -54,7 +54,7 @@ struct ricoh_state
 {
     uint16_t pc;
     uint8_t a, x, y, sp, flags;
-    uint32_t cycles;
+    uint64_t cycles;
 
     uint8_t crash;
 };
@@ -142,7 +142,7 @@ struct ppu
     enum ppu_mir mirroring_mode;
     uint16_t beam;
     int16_t scanline;
-    uint32_t cycles;
+    uint64_t cycles;
     struct ppu_object preload_objects[8];
     uint8_t preload_objects_sprite_0;
     uint8_t preload_objects_count;
@@ -273,9 +273,9 @@ struct apu
 
     uint32_t frame_counter;
     uint8_t status;
-    uint32_t last_cpf; // last cycle of frame clock
-    uint32_t last_cps; // last cycle of sample output
-    uint32_t cycles;
+    uint64_t last_cpf; // last cycle of frame clock
+    uint64_t last_cps; // last cycle of sample output
+    uint64_t cycles;
 
     int16_t sample_ring[APU_SAMPLE_RING_LEN];
     uint32_t sample_ring_write_at;
@@ -297,7 +297,7 @@ uint8_t apu_reg_read(struct apu *apu, enum apu_reg reg);
 void apu_flush(struct apu *apu, void *dest, int count);
 void apu_cycle(struct apu *apu);
 void apu_ring_read(struct apu *apu, uint16_t *dest, uint32_t count);
-void apu_catchup_cycles(struct apu *apu, uint32_t cycles);
+void apu_catchup_cycles(struct apu *apu, uint64_t cycles);
 void apu_catchup_samples(struct apu *apu, uint32_t samples_added);
 
 // IMAP.H
