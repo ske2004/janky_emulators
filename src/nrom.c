@@ -164,7 +164,6 @@ uint8_t nrom_load(uint8_t *ines, struct nrom *out)
         return 3;
     }
 
-    uint32_t mirroring = ines[6]&1;
     uint8_t mapper = (ines[6]>>4)|(ines[7]&0xF0);
 
     if (mapper != 0)
@@ -181,6 +180,7 @@ uint8_t nrom_load(uint8_t *ines, struct nrom *out)
     out->chrsize = ines[5];
     out->controller_strobe = 8;
     nrom_reset(out);
+    uint8_t mirroring = ines[6]&1;
     out->ppu = ppu_mk(mirroring ? PPUMIR_VER : PPUMIR_HOR);
     ppu_write_chr(&out->ppu, ines+16+prg_size, chr_size);
     mux.unlock(mux.mux);

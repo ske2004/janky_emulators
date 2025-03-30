@@ -5,19 +5,17 @@
 #include "SDL3/SDL_events.h"
 #include "SDL3/SDL_image.h"
 #include "SDL3/SDL_init.h"
+#include "SDL3/SDL_keyboard.h"
 #include "SDL3/SDL_keycode.h"
 #include "SDL3/SDL_log.h"
-#include "SDL3/SDL_messagebox.h"
 #include "SDL3/SDL_misc.h"
 #include "SDL3/SDL_mouse.h"
 #include "SDL3/SDL_mutex.h"
-#include "SDL3/SDL_oldnames.h"
 #include "SDL3/SDL_rect.h"
 #include "SDL3/SDL_render.h"
 #include "SDL3/SDL_surface.h"
 #include <SDL3/SDL.h>
 #include "SDL3/SDL_video.h"
-#include "font8x8.h"
 #include "neske.h"
 
 uint32_t pallete[] = {
@@ -35,93 +33,6 @@ uint32_t pallete[] = {
     0xffd59aff, 0xe9e681ff, 0xcef481ff, 0xb6fb9aff, 0xa9fac3ff,
     0xa9f0f4ff, 0xb8b8b8ff, 0x000000ff, 0x000000ff
 };
-
-SDL_Texture *mk_font_texture(SDL_Renderer *renderer)
-{
-    const int width = 128*8;
-
-    SDL_Surface *surface = SDL_CreateSurface(width, 8, SDL_PIXELFORMAT_RGBA8888);
-
-    for (int c = 0; c < 128; c++)
-    {
-        for (int x = 0; x < 8; x++)
-        {
-            for (int y = 0; y < 8; y++)
-            {
-                ((uint32_t*)surface->pixels)[y*width+x+c*8] = font8x8_basic[c][y] & (1<<x) ? 0xFFFFFFFF : 0xFFFFFF00;
-            }
-        }
-    }
-
-    SDL_Texture *texture = SDL_CreateTextureFromSurface(renderer, surface);
-    SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_NEAREST);
-
-    SDL_DestroySurface(surface);
-
-    return texture;
-}
-
-void draw_char(SDL_Renderer *renderer, SDL_Texture *font_texture, int chr, SDL_Point xy, int scale)
-{
-    SDL_FRect src = {chr*8, 0, 8, 8};
-    SDL_FRect dst = {xy.x, xy.y, scale*8, scale*8};
-    SDL_RenderTexture(renderer, font_texture, &src, &dst);
-}
-
-void draw_string(SDL_Renderer *renderer, SDL_Texture *font_texture, const char *string, SDL_Point xy, int scale)
-{
-    for (int i = 0; string[i]; i++)
-    {
-        draw_char(renderer, font_texture, string[i], (SDL_Point){xy.x+i*8*scale, xy.y}, scale);
-    }
-}
-
-SDL_Point size_string(const char *string, int scale)
-{
-    return (SDL_Point){strlen(string) * 8 * scale, 8};
-}
-
-struct ui_draw
-{
-    SDL_Renderer *renderer;
-    SDL_Texture *font;
-};
-
-struct ui_draw ui_draw_mk(SDL_Renderer *renderer)
-{
-    struct ui_draw result = { 0 };
-    result.renderer = renderer;
-    result.font = mk_font_texture(renderer);
-    return result;
-}
-
-void _ui_set_draw_color_rgba(struct ui_draw *it, uint32_t rgba)
-{
-    SDL_SetRenderDrawColor(it->renderer, rgba>>24, rgba>>16, rgba>>8, rgba);
-}
-
-void ui_draw_rect(struct ui_draw *it, SDL_FRect rect)
-{
-    _ui_set_draw_color_rgba(it, 0x2222AAFF);
-    SDL_RenderRect(it->renderer, &rect);
-}
-
-void ui_draw_text(struct ui_draw *it, const char *text, SDL_Point xy, int scale)
-{
-    draw_string(it->renderer, it->font, text, xy, scale);
-}
-
-void ui_draw_item(struct ui_draw *it, SDL_FRect rect, bool hover)
-{
-    _ui_set_draw_color_rgba(it, 0x2222AAFF);
-    SDL_RenderFillRect(it->renderer, &rect);
-    if (hover) {
-        _ui_set_draw_color_rgba(it, 0xFFFFFFFF);
-    } else {
-        _ui_set_draw_color_rgba(it, 0x77AAFFFF);
-    }
-    SDL_RenderRect(it->renderer, &rect);
-}
 
 void sdl_mux_lock( void *mux )
 {
@@ -188,6 +99,19 @@ bool load_rom_from_file(const char *path, struct nrom *nrom)
     return true;
 }
 
+struct controls_spec
+{
+    SDL_Keycode keys[8];
+};
+
+enum ui_window
+{
+    WIN_NONE,
+    WIN_CONFIG,
+    WIN_ABOUT,
+    WIN_FUN,
+};
+
 struct neske_ui
 {
     struct nrom *nrom;
@@ -200,8 +124,12 @@ struct neske_ui
     bool crash;
     bool mouse_released;
     bool ctx_file;
+    bool changing_control;
 
+    enum ui_window show_window;
     struct controller_state controller;
+    struct controls_spec controls;
+    enum controller_btn btn_selected;
     SDL_Texture *tex_backbuffer;
 
     SDL_Cursor *cursor;
@@ -214,7 +142,42 @@ struct neske_ui
     SDL_Texture *tex_userfont;
 };
 
-struct SDL_Texture *load_ui_texture(SDL_Renderer *renderer, const char *path)
+static void draw_user_text(struct neske_ui *ui, const char *text, int x, int y)
+{
+    for (int i = 0; text[i]; i++)
+    {
+        char ch = text[i];
+
+        if (ch >= 'a' && ch <= 'z')
+        {
+            ch -= 'a'-'A';
+        }
+        
+        int index = -1;
+
+        if (ch >= '0' && ch <= '9')
+        {
+            index = ch-'0';
+        }
+
+        if (ch >= 'A' && ch <= 'Z')
+        {
+            index = ch-'A'+10;
+        }
+
+        if (index != -1)
+        {
+            SDL_RenderTexture(
+                ui->renderer,
+                ui->tex_userfont,
+                &(SDL_FRect){index*3, 0, 3, 7},
+                &(SDL_FRect){x+i*4, y, 3, 7}
+            );
+        }
+    }
+}
+
+static struct SDL_Texture *load_ui_texture(SDL_Renderer *renderer, const char *path)
 {
     SDL_Texture *t = IMG_LoadTexture(renderer, path);
     SDL_SetTextureScaleMode(t, SDL_SCALEMODE_NEAREST);
@@ -226,15 +189,30 @@ struct SDL_Texture *load_ui_texture(SDL_Renderer *renderer, const char *path)
     return t;
 }
 
+static void set_default_controls(struct controls_spec *controls)
+{
+    controls->keys[BTN_A] = SDLK_X;
+    controls->keys[BTN_B] = SDLK_Z;
+    controls->keys[BTN_START] = SDLK_RETURN;
+    controls->keys[BTN_SELECT] = SDLK_TAB;
+    controls->keys[BTN_UP] = SDLK_UP;
+    controls->keys[BTN_DOWN] = SDLK_DOWN;
+    controls->keys[BTN_LEFT] = SDLK_LEFT;
+    controls->keys[BTN_RIGHT] = SDLK_RIGHT;
+}
+
 struct neske_ui neske_ui_init(SDL_Renderer *renderer, SDL_Window *window, struct nrom *nrom)
 {
     struct neske_ui ui = { 0 };
 
+    ui.btn_selected = -1;
     ui.mutex = SDL_CreateMutex();
     ui.emulating = false;
     ui.renderer = renderer;
     ui.window = window;
     ui.nrom = nrom;
+
+    set_default_controls(&ui.controls);
 
     ui.tex_menu = load_ui_texture(renderer, "img/menu.png");
     ui.tex_select = load_ui_texture(renderer, "img/select.png");
@@ -255,7 +233,7 @@ struct neske_ui neske_ui_init(SDL_Renderer *renderer, SDL_Window *window, struct
 
     SDL_Surface *cursor_surface_2 = SDL_ScaleSurface(cursor_surface, cursor_surface->w*3, cursor_surface->h*3, SDL_SCALEMODE_NEAREST);
 
-    ui.cursor = SDL_CreateColorCursor(cursor_surface_2, 2, 1);
+    ui.cursor = SDL_CreateColorCursor(cursor_surface_2, 2*3, 1*3);
 
     SDL_SetCursor(ui.cursor);
     
@@ -291,7 +269,14 @@ bool draw_widget(struct neske_ui *ui, const char *name, int x, int y, int w, int
 
     if (SDL_PointInRect(&(SDL_Point){mx/3, my/3}, &(SDL_Rect){x, y, w, h}))
     {
-        SDL_SetRenderDrawColor(ui->renderer, 0xFF, 0xFF, 0xFF, 0x22);
+        if (name[0] == '#') 
+        {
+            SDL_SetRenderDrawColor(ui->renderer, 0x00, 0x00, 0x77, 0x22);
+        }
+        else
+        {
+            SDL_SetRenderDrawColor(ui->renderer, 0xFF, 0xFF, 0xFF, 0x22);
+        }
         SDL_RenderFillRect(ui->renderer, &(SDL_FRect){x, y, w, h});
 
         intersect = true;
@@ -310,21 +295,32 @@ bool neske_ui_event(struct neske_ui *ui, SDL_Event *event)
         if (event->button.button == SDL_BUTTON_LEFT) ui->mouse_released = true;
         case SDL_EVENT_KEY_DOWN:
         case SDL_EVENT_KEY_UP:
-            if (event->key.key == SDLK_X) ui->controller.btns[BTN_A] = event->type == SDL_EVENT_KEY_DOWN;
-            if (event->key.key == SDLK_Z) ui->controller.btns[BTN_B] = event->type == SDL_EVENT_KEY_DOWN;
-            if (event->key.key == SDLK_RETURN) ui->controller.btns[BTN_START] = event->type == SDL_EVENT_KEY_DOWN;
-            if (event->key.key == SDLK_TAB) ui->controller.btns[BTN_SELECT] = event->type == SDL_EVENT_KEY_DOWN;
-            if (event->key.key == SDLK_UP) ui->controller.btns[BTN_UP] = event->type == SDL_EVENT_KEY_DOWN;
-            if (event->key.key == SDLK_DOWN) ui->controller.btns[BTN_DOWN] = event->type == SDL_EVENT_KEY_DOWN;
-            if (event->key.key == SDLK_LEFT) ui->controller.btns[BTN_LEFT] = event->type == SDL_EVENT_KEY_DOWN;
-            if (event->key.key == SDLK_RIGHT) ui->controller.btns[BTN_RIGHT] = event->type == SDL_EVENT_KEY_DOWN;
-            if (ui->emulating)
+            if (ui->show_window == WIN_NONE)
             {
-                nrom_update_controller(ui->nrom, ui->controller);
+                if (event->key.key == ui->controls.keys[BTN_A]) ui->controller.btns[BTN_A] = event->type == SDL_EVENT_KEY_DOWN;
+                if (event->key.key == ui->controls.keys[BTN_B]) ui->controller.btns[BTN_B] = event->type == SDL_EVENT_KEY_DOWN;
+                if (event->key.key == ui->controls.keys[BTN_START]) ui->controller.btns[BTN_START] = event->type == SDL_EVENT_KEY_DOWN;
+                if (event->key.key == ui->controls.keys[BTN_SELECT]) ui->controller.btns[BTN_SELECT] = event->type == SDL_EVENT_KEY_DOWN;
+                if (event->key.key == ui->controls.keys[BTN_UP]) ui->controller.btns[BTN_UP] = event->type == SDL_EVENT_KEY_DOWN;
+                if (event->key.key == ui->controls.keys[BTN_DOWN]) ui->controller.btns[BTN_DOWN] = event->type == SDL_EVENT_KEY_DOWN;
+                if (event->key.key == ui->controls.keys[BTN_LEFT]) ui->controller.btns[BTN_LEFT] = event->type == SDL_EVENT_KEY_DOWN;
+                if (event->key.key == ui->controls.keys[BTN_RIGHT]) ui->controller.btns[BTN_RIGHT] = event->type == SDL_EVENT_KEY_DOWN;
+                if (ui->emulating)
+                {
+                    nrom_update_controller(ui->nrom, ui->controller);
+                }
+            }
+            else if (ui->show_window == WIN_CONFIG)
+            {
+                if (ui->changing_control && event->type == SDL_EVENT_KEY_DOWN)
+                {
+                    ui->controls.keys[ui->btn_selected] = event->key.key;
+                    ui->changing_control = false;
+                }
             }
             break;
     }
-    
+
     SDL_UnlockMutex(ui->mutex);
 
     return true;
@@ -390,6 +386,96 @@ void neske_ui_update(struct neske_ui *ui)
     
     SDL_RenderTexture(ui->renderer, ui->tex_menu, NULL, NULL);
 
+    if (ui->show_window != WIN_NONE)
+    {
+        SDL_SetRenderDrawColor(ui->renderer, 0, 0, 0, 0x44);
+        SDL_RenderFillRect(ui->renderer, &(SDL_FRect){1, 13, 256, 240});
+
+        switch (ui->show_window)
+        {
+        case WIN_CONFIG:
+            {
+                SDL_RenderTexture(ui->renderer, ui->tex_config, NULL, NULL);
+
+                int btn = -1;
+
+                if (draw_widget(ui, "CFG_X", 197, 95, 11, 11))
+                {
+                    ui->show_window = WIN_NONE;
+                }
+
+                if (draw_widget(ui, "CFG_OK", 155, 140, 45, 13))
+                {
+                    ui->show_window = WIN_NONE;
+                }
+
+                if (draw_widget(ui, "CFG_RESET", 155, 124, 45, 13))
+                {
+                    ui->changing_control = false;
+                    set_default_controls(&ui->controls);
+                }
+
+                if (draw_widget(ui, "#CFG_LEFT", 59, 134, 7, 7))
+                {
+                    btn = BTN_LEFT;
+                }
+
+                if (draw_widget(ui, "#CFG_RIGHT", 71, 134, 7, 7))
+                {
+                    btn = BTN_RIGHT;
+                }
+
+                if (draw_widget(ui, "#CFG_UP", 65, 128, 7, 7))
+                {
+                    btn = BTN_UP;
+                }
+
+                if (draw_widget(ui, "#CFG_DOWN", 65, 140, 7, 7))
+                {
+                    btn = BTN_DOWN;
+                }
+
+                if (draw_widget(ui, "#CFG_SELECT", 82, 137, 12, 7))
+                {
+                    btn = BTN_SELECT;
+                }
+
+                if (draw_widget(ui, "#CFG_START", 95, 137, 12, 7))
+                {
+                    btn = BTN_START;
+                }
+                
+                if (draw_widget(ui, "#CFG_B", 111, 135, 11, 11))
+                {
+                    btn = BTN_B;
+                }
+
+                if (draw_widget(ui, "#CFG_A", 124, 135, 11, 11))
+                {
+                    btn = BTN_A;
+                }
+
+                if (btn != -1)
+                {
+                    ui->btn_selected = btn;
+                    ui->changing_control = true;
+                }
+
+                if (ui->btn_selected != -1)
+                {
+                    draw_user_text(ui, SDL_GetKeyName(ui->controls.keys[ui->btn_selected]), 157, 112);
+                }
+
+                if (ui->changing_control)
+                {
+                    SDL_SetRenderDrawColor(ui->renderer, 0xFF, 0xFF, 0, 0xFF);
+                    SDL_RenderRect(ui->renderer, &(SDL_FRect){155, 109, 46, 13});
+                }
+            }
+            break;
+        }
+    }
+
     if (ui->ctx_file)
     {
         SDL_RenderTexture(ui->renderer, ui->tex_ctx_file, NULL, NULL);
@@ -429,17 +515,19 @@ void neske_ui_update(struct neske_ui *ui)
 
     if (draw_widget(ui, "Config", 26, 1, 32, 11))
     {
-    
+        ui->changing_control = false;
+        ui->btn_selected = -1;
+        ui->show_window = WIN_CONFIG;
     }
     
     if (draw_widget(ui, "About", 59, 1, 29, 11))
     {
-    
+        ui->show_window = WIN_ABOUT;
     }
 
     if (draw_widget(ui, "Fun", 89, 1, 21, 11))
     {
-    
+        ui->show_window = WIN_FUN;
     }
 
     if (draw_widget(ui, "X", 246, 1, 11, 11))
@@ -471,7 +559,6 @@ void audio_callback(void *userdata, SDL_AudioStream *stream, int additional_amou
     nrom->apu_mux.unlock(nrom->apu_mux.mux);
     SDL_PutAudioStreamData(stream, buf, additional_amount);
 }
-
 
 int main(int argc, char* argv[]) {
     struct nrom nrom = { 0 };
@@ -506,7 +593,6 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     
-    struct ui_draw uidraw = ui_draw_mk(renderer);
     SDL_AudioSpec audio_in = { 0 };
 
     audio_in.channels = 1;
