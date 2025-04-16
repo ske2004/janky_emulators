@@ -19,19 +19,22 @@
 #include "neske.h"
 
 uint32_t pallete[] = {
-    0x626262ff, 0x001fb2ff, 0x2404c8ff, 0x5200b2ff, 0x730076ff, 
-    0x800024ff, 0x730b00ff, 0x522800ff, 0x244400ff, 0x005700ff, 
-    0x005c00ff, 0x005324ff, 0x003c76ff, 0x000000ff, 0x000000ff, 
-    0x000000ff, 0xabababff, 0x0d57ffff, 0x4b30ffff, 0x8a13ffff,
-    0xbc08d6ff, 0xd21269ff, 0xc72e00ff, 0x9d5400ff, 0x607b00ff,
-    0x209800ff, 0x00a300ff, 0x009942ff, 0x007db4ff, 0x000000ff,
-    0x000000ff, 0x000000ff, 0xffffffff, 0x53aeffff, 0x9085ffff,
-    0xd365ffff, 0xff57ffff, 0xff5dcfff, 0xff7757ff, 0xfa9e00ff,
-    0xbdc700ff, 0x7ae700ff, 0x43f611ff, 0x26ef7eff, 0x2cd5f6ff,
-    0x4e4e4eff, 0x000000ff, 0x000000ff, 0xffffffff, 0xb6e1ffff,
-    0xced1ffff, 0xe9c3ffff, 0xffbcffff, 0xffbdf4ff, 0xffc6c3ff,
-    0xffd59aff, 0xe9e681ff, 0xcef481ff, 0xb6fb9aff, 0xa9fac3ff,
-    0xa9f0f4ff, 0xb8b8b8ff, 0x000000ff, 0x000000ff
+    0x626262ff, 0x001fb2ff, 0x2404c8ff, 0x5200b2ff,
+    0x730076ff, 0x800024ff, 0x730b00ff, 0x522800ff,
+    0x244400ff, 0x005700ff, 0x005c00ff, 0x005324ff,
+    0x003c76ff, 0x000000ff, 0x000000ff, 0x000000ff,
+    0xabababff, 0x0d57ffff, 0x4b30ffff, 0x8a13ffff,
+    0xbc08d6ff, 0xd21269ff, 0xc72e00ff, 0x9d5400ff,
+    0x607b00ff, 0x209800ff, 0x00a300ff, 0x009942ff,
+    0x007db4ff, 0x000000ff, 0x000000ff, 0x000000ff,
+    0xffffffff, 0x53aeffff, 0x9085ffff, 0xd365ffff,
+    0xff57ffff, 0xff5dcfff, 0xff7757ff, 0xfa9e00ff,
+    0xbdc700ff, 0x7ae700ff, 0x43f611ff, 0x26ef7eff,
+    0x2cd5f6ff, 0x4e4e4eff, 0x000000ff, 0x000000ff,
+    0xffffffff, 0xb6e1ffff, 0xced1ffff, 0xe9c3ffff,
+    0xffbcffff, 0xffbdf4ff, 0xffc6c3ff, 0xffd59aff,
+    0xe9e681ff, 0xcef481ff, 0xb6fb9aff, 0xa9fac3ff,
+    0xa9f0f4ff, 0xb8b8b8ff, 0x000000ff, 0x000000ff,
 };
 
 void sdl_mux_lock( void *mux )
@@ -139,6 +142,7 @@ struct neske_ui
     SDL_Texture *tex_crash;
     SDL_Texture *tex_ctx_file;
     SDL_Texture *tex_config;
+    SDL_Texture *tex_about;
     SDL_Texture *tex_userfont;
 };
 
@@ -220,6 +224,7 @@ struct neske_ui neske_ui_init(SDL_Renderer *renderer, SDL_Window *window, struct
     ui.tex_crash = load_ui_texture(renderer, "img/crash.png");
     ui.tex_ctx_file = load_ui_texture(renderer, "img/ctx_file.png");
     ui.tex_config = load_ui_texture(renderer, "img/config.png");
+    ui.tex_about = load_ui_texture(renderer, "img/about.png");
     ui.tex_userfont = load_ui_texture(renderer, "img/userfont.png");
     ui.tex_backbuffer = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, 256, 240);
     SDL_SetTextureScaleMode(ui.tex_backbuffer, SDL_SCALEMODE_NEAREST);
@@ -297,14 +302,16 @@ bool neske_ui_event(struct neske_ui *ui, SDL_Event *event)
         case SDL_EVENT_KEY_UP:
             if (ui->show_window == WIN_NONE)
             {
-                if (event->key.key == ui->controls.keys[BTN_A]) ui->controller.btns[BTN_A] = event->type == SDL_EVENT_KEY_DOWN;
-                if (event->key.key == ui->controls.keys[BTN_B]) ui->controller.btns[BTN_B] = event->type == SDL_EVENT_KEY_DOWN;
-                if (event->key.key == ui->controls.keys[BTN_START]) ui->controller.btns[BTN_START] = event->type == SDL_EVENT_KEY_DOWN;
-                if (event->key.key == ui->controls.keys[BTN_SELECT]) ui->controller.btns[BTN_SELECT] = event->type == SDL_EVENT_KEY_DOWN;
-                if (event->key.key == ui->controls.keys[BTN_UP]) ui->controller.btns[BTN_UP] = event->type == SDL_EVENT_KEY_DOWN;
-                if (event->key.key == ui->controls.keys[BTN_DOWN]) ui->controller.btns[BTN_DOWN] = event->type == SDL_EVENT_KEY_DOWN;
-                if (event->key.key == ui->controls.keys[BTN_LEFT]) ui->controller.btns[BTN_LEFT] = event->type == SDL_EVENT_KEY_DOWN;
-                if (event->key.key == ui->controls.keys[BTN_RIGHT]) ui->controller.btns[BTN_RIGHT] = event->type == SDL_EVENT_KEY_DOWN;
+                const enum controller_btn buttons[] = { BTN_A, BTN_B, BTN_START, BTN_SELECT, BTN_UP, BTN_DOWN, BTN_LEFT, BTN_RIGHT };
+
+                for (int i = 0; i < 8; i++)
+                {
+                    if (event->key.key == ui->controls.keys[buttons[i]])
+                    {
+                        ui->controller.btns[buttons[i]] = event->type == SDL_EVENT_KEY_DOWN;
+                    }
+                }
+
                 if (ui->emulating)
                 {
                     nrom_update_controller(ui->nrom, ui->controller);
@@ -473,6 +480,22 @@ void neske_ui_update(struct neske_ui *ui)
                 }
             }
             break;
+        case WIN_ABOUT:
+            SDL_RenderTexture(ui->renderer, ui->tex_about, NULL, NULL);
+            if (draw_widget(ui, "ABOUT_X", 197, 95, 11, 11))
+            {
+                ui->show_window = WIN_NONE;
+            }
+
+            if (draw_widget(ui, "ABOUT_CLOSE", 143, 140, 60, 13))
+            {
+                ui->show_window = WIN_NONE;
+            }
+            
+            if (draw_widget(ui, "ABOUT_URL", 102, 123, 48, 11))
+            {
+                SDL_OpenURL("https://ske.land");
+            }
         }
     }
 
@@ -562,17 +585,16 @@ void audio_callback(void *userdata, SDL_AudioStream *stream, int additional_amou
 
 int main(int argc, char* argv[]) {
     struct nrom nrom = { 0 };
-    SDL_Window *window;                    // Declare a pointer
+    SDL_Window *window;
     SDL_Renderer *renderer;
     bool done = false;
 
-    SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO);              // Initialize SDL3
+    SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO);
 
-    // Create an application window with the following settings:
     window = SDL_CreateWindow(
-        "neske",                           // window title
-        258*3,                               // width, in pixels
-        254*3,                               // height, in pixels
+        "neske",
+        258*3,
+        254*3,
         SDL_WINDOW_OPENGL | SDL_WINDOW_BORDERLESS
     );
     SDL_SetWindowHitTest(window, hit_test, NULL);
@@ -607,11 +629,11 @@ int main(int argc, char* argv[]) {
     struct neske_ui neske_ui = neske_ui_init(renderer, window, &nrom);
     SDL_AudioStream *audio_device_stream = SDL_OpenAudioDeviceStream(audio_device, &audio_in, audio_callback, &nrom);
     SDL_ResumeAudioStreamDevice(audio_device_stream);
-
     while (!done) {
         SDL_Event event;
 
         while (SDL_PollEvent(&event)) {
+            
             if (event.type == SDL_EVENT_QUIT)
             {
                 done = true;
