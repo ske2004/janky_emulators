@@ -3,6 +3,14 @@
 #include <stdio.h>
 #include <string.h>
 
+struct ricoh_address {
+    bool is_invalid;
+    bool is_imm;
+    bool is_acc;
+    uint16_t addr;
+    uint8_t imm;
+};
+
 const char *ricoh_instr_to_str[] =
 {
     "ADC", "AND", "ASL",
@@ -374,55 +382,64 @@ static uint16_t pagecrossbranch(struct ricoh_state *cpu, uint16_t a, int8_t b)
     return a + b;
 }
 
-uint8_t do_read(
+struct ricoh_address make_address(
     struct ricoh_state *cpu,
     struct instr_decoded instr,
     struct ricoh_mem_interface *mem
 )
 {
+    struct ricoh_address addr = { 0 };
+    
     switch (instr.addr_mode)
     {
-        case AM_ACC: return cpu->a;
-        case AM_ABS: return read_8(cpu, mem, *(uint16_t*)instr.operand);
-        case AM_ABX: return read_8(cpu, mem, pagecross(cpu, *(uint16_t*)instr.operand, cpu->x));
-        case AM_ABY: return read_8(cpu, mem, pagecross(cpu, *(uint16_t*)instr.operand, cpu->y));
-        case AM_IMM: return instr.operand[0];
-        case AM_IMP: assert(false && "Handle yourself");
-        case AM_IND: return read_8(cpu, mem, read_16(cpu, mem, *(uint16_t*)instr.operand));
-        case AM_XND: return read_8(cpu, mem, read_16zp(cpu, mem, (uint8_t)(instr.operand[0] + cpu->x)));
-        case AM_INY: return read_8(cpu, mem, pagecross(cpu, read_16zp(cpu, mem, instr.operand[0]), cpu->y));
-        case AM_REL: assert(false && "handle it in branches uwu");
-        case AM_ZPG: return read_8(cpu, mem, instr.operand[0]);
-        case AM_ZPX: return read_8(cpu, mem, (uint8_t)(instr.operand[0] + cpu->x));
-        case AM_ZPY: return read_8(cpu, mem, (uint8_t)(instr.operand[0] + cpu->y));
+        case AM_ACC: addr.is_acc = true; break;
+        case AM_ABS: addr.addr = *(uint16_t*)instr.operand; break;
+        case AM_ABX: addr.addr = pagecross(cpu, *(uint16_t*)instr.operand, cpu->x); break;
+        case AM_ABY: addr.addr = pagecross(cpu, *(uint16_t*)instr.operand, cpu->y); break;
+        case AM_IMM: addr.is_imm = true; addr.imm = instr.operand[0]; break;
+        case AM_IMP: addr.is_invalid = true; break;
+        case AM_IND: addr.addr = read_16(cpu, mem, *(uint16_t*)instr.operand); break;
+        case AM_XND: addr.addr = read_16zp(cpu, mem, (uint8_t)(instr.operand[0] + cpu->x)); break;
+        case AM_INY: addr.addr = pagecross(cpu, read_16zp(cpu, mem, instr.operand[0]), cpu->y); break;
+        case AM_REL: addr.is_invalid = true; break;
+        case AM_ZPG: addr.addr = instr.operand[0]; break;
+        case AM_ZPX: addr.addr = (uint8_t)(instr.operand[0] + cpu->x); break;
+        case AM_ZPY: addr.addr = (uint8_t)(instr.operand[0] + cpu->y); break;
     }
 
-    return 0;
+    return addr;
 }
 
-
-void do_write(
-    struct ricoh_state *cpu,
-    struct instr_decoded instr,
-    struct ricoh_mem_interface *mem,
-    uint8_t byte
-)
+static uint8_t do_read(struct ricoh_state *cpu, struct ricoh_address addr, struct ricoh_mem_interface *mem)
 {
-    switch (instr.addr_mode)
+    assert(addr.is_invalid == false && "i fucked up oops");
+
+    if (addr.is_acc)
     {
-        case AM_ACC: setreg(cpu, REG_A, byte); break;
-        case AM_ABS: write_8(cpu, mem, *(uint16_t*)instr.operand, byte); break;
-        case AM_ABX: write_8(cpu, mem, pagecross(cpu, *(uint16_t*)instr.operand, cpu->x), byte); break;
-        case AM_ABY: write_8(cpu, mem, pagecross(cpu, *(uint16_t*)instr.operand, cpu->y), byte); break;
-        case AM_IMM: assert(false && "u wot m8"); break;
-        case AM_IMP: assert(false && "void"); break;
-        case AM_IND: write_8(cpu, mem, read_16(cpu, mem, *(uint16_t*)instr.operand), byte); break;
-        case AM_XND: write_8(cpu, mem, read_16zp(cpu, mem, (uint8_t)(instr.operand[0] + cpu->x)), byte); break;
-        case AM_INY: write_8(cpu, mem, pagecross(cpu, read_16zp(cpu, mem, instr.operand[0]), cpu->y), byte); break;
-        case AM_REL: assert(false && "doesn't even make sense"); break;
-        case AM_ZPG: write_8(cpu, mem, instr.operand[0], byte); break;
-        case AM_ZPX: write_8(cpu, mem, (uint8_t)(instr.operand[0] + cpu->x), byte); break;
-        case AM_ZPY: write_8(cpu, mem, (uint8_t)(instr.operand[0] + cpu->y), byte); break;
+        return cpu->a;
+    }
+    else if (addr.is_imm)
+    {
+        return addr.imm;
+    }
+    else
+    {
+        return read_8(cpu, mem, addr.addr);
+    }
+}
+
+static void do_write(struct ricoh_state *cpu, struct ricoh_address addr, struct ricoh_mem_interface *mem, uint8_t val)
+{
+    assert(addr.is_invalid == false && "i fucked up oops");
+    assert(addr.is_imm == false && "imm write >_>");
+
+    if (addr.is_acc)
+    {
+        setreg(cpu, REG_A, val);
+    }
+    else
+    {
+        write_8(cpu, mem, addr.addr, val);
     }
 }
 
@@ -492,23 +509,26 @@ void ricoh_run_instr(
     struct ricoh_mem_interface *mem
 )
 {
+    uint8_t rmw_temp = 0;
+
     cpu->pc += instr.size;
     cpu->cycles += ricoh_cycle_tbl[instr.addr_mode+instr.id*13];
+
+    struct ricoh_address addr = make_address(cpu, instr, mem);
 
     switch (instr.id)
     {
         case ADC:
-            setreg(cpu, REG_A, do_add_carry(cpu, cpu->a, do_read(cpu, instr, mem)));
+            setreg(cpu, REG_A, do_add_carry(cpu, cpu->a, do_read(cpu, addr, mem)));
             break;
         case AND:
-            setreg(cpu, REG_A, cpu->a & do_read(cpu, instr, mem));
+            setreg(cpu, REG_A, cpu->a & do_read(cpu, addr, mem));
             break;
         case ASL:
-            {
-                uint8_t byte = do_read(cpu, instr, mem);
-                do_write(cpu, instr, mem, updateflags(cpu, byte<<1));
-                setflag(cpu, FLAG_CAR, (byte&0x80) > 0);
-            }
+            rmw_temp = do_read(cpu, addr, mem);
+            do_write(cpu, addr, mem, rmw_temp);
+            do_write(cpu, addr, mem, updateflags(cpu, rmw_temp<<1));
+            setflag(cpu, FLAG_CAR, (rmw_temp&0x80) > 0);
             break;
         case BCC:
             do_reljump(cpu, instr, getflag(cpu, FLAG_CAR) == false);
@@ -521,7 +541,7 @@ void ricoh_run_instr(
             break;
         case BIT:
             {
-                uint8_t byte = do_read(cpu, instr, mem);
+                uint8_t byte = do_read(cpu, addr, mem);
                 setflag(cpu, FLAG_NEG, byte>>7&1);
                 setflag(cpu, FLAG_OFW, byte>>6&1);
                 setflag(cpu, FLAG_ZER, (byte & cpu->a) == 0);
@@ -561,16 +581,18 @@ void ricoh_run_instr(
             setflag(cpu, FLAG_OFW, false);
             break;
         case CMP:
-            do_cmp(cpu, cpu->a, do_read(cpu, instr, mem));
+            do_cmp(cpu, cpu->a, do_read(cpu, addr, mem));
             break;
         case CPX:
-            do_cmp(cpu, cpu->x, do_read(cpu, instr, mem));
+            do_cmp(cpu, cpu->x, do_read(cpu, addr, mem));
             break;
         case CPY:
-            do_cmp(cpu, cpu->y, do_read(cpu, instr, mem));
+            do_cmp(cpu, cpu->y, do_read(cpu, addr, mem));
             break;
         case DEC:
-            do_write(cpu, instr, mem, updateflags(cpu,do_read(cpu, instr, mem)-1));
+            rmw_temp = do_read(cpu, addr, mem);
+            do_write(cpu, addr, mem, rmw_temp);
+            do_write(cpu, addr, mem, updateflags(cpu, rmw_temp-1));
             break;
         case DEX:
             setreg(cpu, REG_X, cpu->x-1);
@@ -579,10 +601,12 @@ void ricoh_run_instr(
             setreg(cpu, REG_Y, cpu->y-1);
             break;
         case EOR:
-            setreg(cpu, REG_A, cpu->a ^ do_read(cpu, instr, mem));
+            setreg(cpu, REG_A, cpu->a ^ do_read(cpu, addr, mem));
             break;
         case INC:
-            do_write(cpu, instr, mem, updateflags(cpu, do_read(cpu, instr, mem)+1));
+            rmw_temp = do_read(cpu, addr, mem);
+            do_write(cpu, addr, mem, rmw_temp);
+            do_write(cpu, addr, mem, updateflags(cpu, rmw_temp+1));
             break;
         case INX:
             setreg(cpu, REG_X, cpu->x+1);
@@ -598,25 +622,24 @@ void ricoh_run_instr(
             cpu->pc = do_readjmp(cpu, instr, mem);
             break;
         case LDA:
-            setreg(cpu, REG_A, do_read(cpu, instr, mem));
+            setreg(cpu, REG_A, do_read(cpu, addr, mem));
             break;
         case LDX:
-            setreg(cpu, REG_X, do_read(cpu, instr, mem));
+            setreg(cpu, REG_X, do_read(cpu, addr, mem));
             break;
         case LDY:
-            setreg(cpu, REG_Y, do_read(cpu, instr, mem));
+            setreg(cpu, REG_Y, do_read(cpu, addr, mem));
             break;
         case LSR:
-            {
-                uint8_t byte = do_read(cpu, instr, mem);
-                do_write(cpu, instr, mem, updateflags(cpu, byte>>1));
-                setflag(cpu, FLAG_CAR, (byte&1) > 0);
-            }
+            rmw_temp = do_read(cpu, addr, mem);
+            do_write(cpu, addr, mem, rmw_temp);
+            do_write(cpu, addr, mem, updateflags(cpu, rmw_temp>>1));
+            setflag(cpu, FLAG_CAR, (rmw_temp&1) > 0);
             break;
         case NOP:
             break;
         case ORA:
-            setreg(cpu, REG_A, cpu->a | do_read(cpu, instr, mem));
+            setreg(cpu, REG_A, cpu->a | do_read(cpu, addr, mem));
             break;
         case PHA:
             push8(cpu, mem, cpu->a);
@@ -631,20 +654,16 @@ void ricoh_run_instr(
             cpu->flags = (cpu->flags & ((1 << FLAG_BRK) | (1 << FLAG_BI5))) | (pull8(cpu, mem) & (((1 << FLAG_BRK) | (1 << FLAG_BI5)) ^ 0xFF));
             break;
         case ROL:
-            {
-                uint8_t val = do_read(cpu, instr, mem);
-                uint8_t car = getflag(cpu, FLAG_CAR);
-                do_write(cpu, instr, mem, updateflags(cpu, (val<<1)|car));
-                setflag(cpu, FLAG_CAR, (val&0x80) > 0);
-            }
+            rmw_temp = do_read(cpu, addr, mem);
+            do_write(cpu, addr, mem, rmw_temp);
+            do_write(cpu, addr, mem, updateflags(cpu, (rmw_temp<<1)|getflag(cpu, FLAG_CAR)));
+            setflag(cpu, FLAG_CAR, (rmw_temp&0x80) > 0);
             break;
         case ROR:
-            {
-                uint8_t val = do_read(cpu, instr, mem);
-                uint8_t car = getflag(cpu, FLAG_CAR);
-                do_write(cpu, instr, mem, updateflags(cpu, (val>>1)|(car<<7)));
-                setflag(cpu, FLAG_CAR, (val&0x1) > 0);
-            }
+            rmw_temp = do_read(cpu, addr, mem);
+            do_write(cpu, addr, mem, rmw_temp);
+            do_write(cpu, addr, mem, updateflags(cpu, (rmw_temp>>1)|(getflag(cpu, FLAG_CAR)<<7)));
+            setflag(cpu, FLAG_CAR, (rmw_temp&0x1) > 0);
             break;
         case RTI:
             cpu->flags = (cpu->flags & ((1 << FLAG_BRK) | (1 << FLAG_BI5))) | (pull8(cpu, mem) & (((1 << FLAG_BRK) | (1 << FLAG_BI5)) ^ 0xFF));
@@ -655,7 +674,7 @@ void ricoh_run_instr(
             cpu->pc = pull16(cpu, mem)+1;
             break;
         case SBC:
-            setreg(cpu, REG_A, do_sub_carry(cpu, cpu->a, do_read(cpu, instr, mem), true, true));
+            setreg(cpu, REG_A, do_sub_carry(cpu, cpu->a, do_read(cpu, addr, mem), true, true));
             break;
         case SEC:
             setflag(cpu, FLAG_CAR, 1);
@@ -667,13 +686,13 @@ void ricoh_run_instr(
             setflag(cpu, FLAG_INT, 1);
             break;
         case STA:
-            do_write(cpu, instr, mem, cpu->a);
+            do_write(cpu, addr, mem, cpu->a);
             break;
         case STX:
-            do_write(cpu, instr, mem, cpu->x);
+            do_write(cpu, addr, mem, cpu->x);
             break;
         case STY:
-            do_write(cpu, instr, mem, cpu->y);
+            do_write(cpu, addr, mem, cpu->y);
             break;
         case TAX:
             setreg(cpu, REG_X, cpu->a);
