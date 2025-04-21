@@ -124,11 +124,21 @@ struct ppu_object
     uint8_t x;
 };
 
+struct ppu_pins
+{
+    uint8_t chr[8192];
+    enum ppu_mir mirroring_mode;
+};
+
 struct ppu
 {
-    // Internal memory
+    // External pins
+    struct ppu_pins pins;
+
+    // Internal memorky
     struct ppu_object oam[64];
-    uint8_t vram[1<<14];
+    uint8_t pallete[32];
+    uint8_t vram[2048];
     uint8_t regs[PPUIR_COUNT];
 
     // Internal Registers   
@@ -139,7 +149,6 @@ struct ppu
 
     // Rendering & Timing
     uint8_t screen[256*240];
-    enum ppu_mir mirroring_mode;
     uint16_t beam;
     int16_t scanline;
     uint64_t cycles;
@@ -148,7 +157,7 @@ struct ppu
     uint8_t preload_objects_count;
 };
 
-struct ppu ppu_mk(enum ppu_mir mirroring_mode);
+struct ppu ppu_mk();
 void ppu_write_chr(struct ppu *ppu, uint8_t *chr, uint32_t chr_size);
 uint16_t ppu_get_addr(struct ppu *ppu);
 void ppu_set_addr(struct ppu *ppu, uint16_t addr);
@@ -327,7 +336,7 @@ struct mux_api {
     void (*unlock)(void *mux);
 };
 
-// NROM.H
+// SYSTEM.H
 
 enum vector
 {
@@ -353,7 +362,7 @@ struct controller_state
     uint8_t btns[8];
 };
 
-struct nrom
+struct system
 {
     struct ricoh_decoder decoder;
     struct ricoh_state cpu;
@@ -364,21 +373,50 @@ struct nrom
     struct controller_state controller;
     uint8_t controller_strobe;
 
-    uint8_t prgsize;
-    uint8_t chrsize;
     uint8_t memory[1<<16];
 };
 
-struct nrom_frame_result
+struct system_frame_result
 {
     uint8_t screen[240*256];
 };
 
-uint16_t nrom_get_vector(struct nrom *nrom, enum vector vec);
-void nrom_update_controller(struct nrom *nrom, struct controller_state cs);
-uint8_t nrom_load(uint8_t *ines, struct nrom *out);
-struct ricoh_mem_interface nrom_get_memory_interface(struct nrom *nrom);
-struct nrom_frame_result nrom_frame(struct nrom *nrom);
-void nrom_reset(struct nrom *nrom);
+struct system system_init(struct mux_api apu_mux);
+uint16_t system_get_vector(struct system *system, enum vector vec);
+void system_update_controller(struct system *system, struct controller_state cs);
+uint8_t system_load(uint8_t *ines, struct system *out);
+struct ricoh_mem_interface system_get_memory_interface(struct system *system);
+struct system_frame_result system_frame(struct system *system);
+void system_reset(struct system *system);
+
+// MAPPER.H
+
+struct mapper_data
+{
+    bool is_valid;
+    uint8_t *ines;
+    uint8_t prg_banks;
+    uint8_t chr_banks;
+    uint8_t mapper_number;
+    enum ppu_mir mirroring;
+};
+
+struct mapper
+{
+    struct system system;
+    void *mapper_data;
+    void (*init)(struct mapper *mapper);
+    void (*reset)(struct mapper *mapper);
+    uint8_t (*mem_read)(struct mapper *mapper, uint16_t addr);
+    void (*mem_write)(struct mapper *mapper, uint16_t addr, uint8_t val);
+};
+
+struct mapper mapper_init(uint8_t *ines, struct mux_api apu_mux);
+void mapper_free(struct mapper *mapper);
+void mapper_reset(struct mapper *mapper);
+void mapper_set_controller(struct mapper *mapper, struct controller_state controller);
+struct system_frame_result mapper_frame(struct mapper *mapper);
+
+
 
 #endif

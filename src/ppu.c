@@ -3,56 +3,67 @@
 #include <stdio.h>
 #include <string.h>
 
-uint16_t ppu_vram_map(struct ppu *ppu, uint16_t addr)
+uint8_t *ppu_vram_get_ptr(struct ppu *ppu, uint16_t addr)
 {
-    if (addr >= 0x3F00 && addr <= 0x4000)
+    if (addr >= 0x0000 && addr < 0x2000)
     {
-        addr = 0x3F00 + (addr % 0x20);
-
-        // Pallete first index mirroring
-        if ((addr % 4) == 0)
-        {
-            addr = (addr & 0xF) | 0x3F00;
-        }
-
-        return addr;
+        return ppu->pins.chr + addr;
     }
 
     if (addr >= 0x2000 && addr < 0x3000)
     {
-        if (ppu->mirroring_mode == PPUMIR_HOR)
+        if (ppu->pins.mirroring_mode == PPUMIR_HOR)
         {
-            if ((addr >= 0x2400 && addr < 0x2800) || (addr >= 0x2C00 && addr < 0x3000))
+            if (addr >= 0x2400 && addr < 0x2800)
             {
                 addr -= 0x400;
             }
+
+            if (addr >= 0x2C00 && addr < 0x3000)
+            {
+                addr -= 0xC00;
+            }
         }
-        else 
+        else
         {
             if (addr >= 0x2800 && addr < 0x3000)
             {
                 addr -= 0x800;
             }
         }
+
+        return ppu->vram + (addr-0x2000);
     }
 
-    return addr;
+    if (addr >= 0x3F00 && addr <= 0x4000)
+    {
+        addr = addr % 0x20;
+
+        // Pallete first index mirroring
+        if ((addr % 4) == 0)
+        {
+            addr = addr & 0xF;
+        }
+
+        return ppu->pallete + addr;
+    }
+
+    return ppu->vram + addr;
 }
 
 uint8_t ppu_vram_read(struct ppu *ppu, uint16_t addr)
 {
-    return ppu->vram[ppu_vram_map(ppu, addr)];
+    return ppu_vram_get_ptr(ppu, addr)[0];
 }
 
 void ppu_vram_write(struct ppu *ppu, uint16_t addr, uint8_t val)
 {
-    ppu->vram[ppu_vram_map(ppu, addr)] = val;
+    ppu_vram_get_ptr(ppu, addr)[0] = val;
 }
 
-struct ppu ppu_mk(enum ppu_mir mirroring_mode)
+struct ppu ppu_mk()
 {
     struct ppu ppu = { 0 };
-    ppu.mirroring_mode = mirroring_mode;
     return ppu;
 }
 
@@ -195,7 +206,7 @@ struct ppu_nametable_result ppu_read_nametable(struct ppu *ppu, uint8_t x, uint8
     x %= 64;
     y %= 60;
 
-    if (ppu->mirroring_mode == PPUMIR_HOR)
+    if (ppu->pins.mirroring_mode == PPUMIR_HOR)
     {
         x %= 32;
     }
@@ -222,10 +233,10 @@ struct ppu_nametable_result ppu_read_nametable(struct ppu *ppu, uint8_t x, uint8
     uint8_t quadx = (x>>1)&1; // 0 1
     uint8_t quady = (y>>1)&1; // 0 0
     uint8_t q = (quadx|(quady<<1))<<1; // right
-    uint8_t palidx = (ppu->vram[addr+0x3C0+octx+octy*8]>>q)&3;
+    uint8_t palidx = (ppu_vram_read(ppu, addr+0x3C0+octx+octy*8)>>q)&3;
 
     return (struct ppu_nametable_result) {
-        ppu->vram[addr + x + y * 32],
+        ppu_vram_read(ppu, addr + x + y * 32),
         palidx
     };
 }
@@ -272,13 +283,13 @@ uint8_t ppu_get_pixel(struct ppu *ppu, int x, int y)
         int tx = sx%8;
         int ty = sy%8;
 
-        uint8_t lo = (ppu->vram[(uint16_t)tile*16+ty]>>(7-tx))&1;
-        uint8_t hi = (ppu->vram[(uint16_t)tile*16+8+ty]>>(7-tx))&1;
+        uint8_t lo = (ppu_vram_read(ppu, (uint16_t)tile*16+ty)>>(7-tx))&1;
+        uint8_t hi = (ppu_vram_read(ppu, (uint16_t)tile*16+8+ty)>>(7-tx))&1;
         uint8_t palcoloridx = lo | (hi << 1);
-        uint8_t palcolor = ppu->vram[0x3F00+palidx*4+palcoloridx];
+        uint8_t palcolor = ppu_vram_read(ppu, 0x3F00+palidx*4+palcoloridx);
         if (palcoloridx == 0)
         {
-            palcolor = ppu->vram[0x3F00];
+            palcolor = ppu_vram_read(ppu, 0x3F00);
         }
 
         opaque = palcoloridx != 0;
@@ -314,10 +325,10 @@ uint8_t ppu_get_pixel(struct ppu *ppu, int x, int y)
                 uint8_t palidx = obj.attr&3;
                 ty %= 8;
 
-                uint8_t lo = (ppu->vram[tile*16+ty]>>(7-tx))&1;
-                uint8_t hi = (ppu->vram[tile*16+8+ty]>>(7-tx))&1;
+                uint8_t lo = (ppu_vram_read(ppu, tile*16+ty)>>(7-tx))&1;
+                uint8_t hi = (ppu_vram_read(ppu, tile*16+8+ty)>>(7-tx))&1;
                 uint8_t palcoloridx = lo | (hi << 1);
-                uint8_t palcolor = ppu->vram[0x3F10+palidx*4+palcoloridx];
+                uint8_t palcolor = ppu_vram_read(ppu, 0x3F10+palidx*4+palcoloridx);
              
                 if (palcoloridx == 0) 
                 {
@@ -357,10 +368,10 @@ uint8_t ppu_get_pixel(struct ppu *ppu, int x, int y)
                 if (ppu->regs[PPUIR_CTRL] & (1<<3)) tile += 0x100;
                 uint8_t palidx = obj.attr&3;
 
-                uint8_t lo = (ppu->vram[tile*16+ty]>>(7-tx))&1;
-                uint8_t hi = (ppu->vram[tile*16+8+ty]>>(7-tx))&1;
+                uint8_t lo = (ppu_vram_read(ppu, tile*16+ty)>>(7-tx))&1;
+                uint8_t hi = (ppu_vram_read(ppu, tile*16+8+ty)>>(7-tx))&1;
                 uint8_t palcoloridx = lo | (hi << 1);
-                uint8_t palcolor = ppu->vram[0x3F10+palidx*4+palcoloridx];
+                uint8_t palcolor = ppu_vram_read(ppu, 0x3F10+palidx*4+palcoloridx);
              
                 if (palcoloridx == 0) 
                 {
