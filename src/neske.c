@@ -73,13 +73,13 @@ void show_error(const char *title, const char *mesg, bool fatal)
     }
 }
 
-bool load_rom_from_file(const char *path, struct nrom *nrom)
+struct player load_rom_from_file(const char *path, struct mux_api apu_mux)
 {
     FILE *fp = fopen(path, "rb");
     if (!fp)
     {
         show_error("Error loading ROM:", "Can't open the file", false);
-        return false;
+        return (struct player){ 0 };
     }
     fseek(fp, 0, SEEK_END);
     size_t fsize = ftell(fp);
@@ -90,16 +90,18 @@ bool load_rom_from_file(const char *path, struct nrom *nrom)
 
     if (fsize < 16)
     {
-        return false;
+        return (struct player){ 0 };
     }
 
-    if (nrom_load(rom, nrom))
+    struct player player = player_init(rom, apu_mux);
+
+    if (!player.is_valid)
     {
         show_error("Error loading ROM:", "Invalid ROM or I don't support that mapper oops", false);
-        return false;
+        return (struct player){ 0 };
     }
 
-    return true;
+    return player;
 }
 
 struct controls_spec
@@ -117,7 +119,8 @@ enum ui_window
 
 struct neske_ui
 {
-    struct nrom *nrom;
+    struct player player;
+    struct mux_api apu_mux;
     SDL_Renderer *renderer;
     SDL_Window *window;
     SDL_Mutex *mutex;
@@ -205,16 +208,16 @@ static void set_default_controls(struct controls_spec *controls)
     controls->keys[BTN_RIGHT] = SDLK_RIGHT;
 }
 
-struct neske_ui neske_ui_init(SDL_Renderer *renderer, SDL_Window *window, struct nrom *nrom)
+struct neske_ui neske_ui_init(SDL_Renderer *renderer, SDL_Window *window)
 {
     struct neske_ui ui = { 0 };
 
+    ui.apu_mux = sdl_mux_make();
     ui.btn_selected = -1;
     ui.mutex = SDL_CreateMutex();
     ui.emulating = false;
     ui.renderer = renderer;
     ui.window = window;
-    ui.nrom = nrom;
 
     set_default_controls(&ui.controls);
 
@@ -248,7 +251,7 @@ struct neske_ui neske_ui_init(SDL_Renderer *renderer, SDL_Window *window, struct
     return ui;
 }
 
-void draw_nes_emu(SDL_Renderer *renderer, SDL_Texture *sdltexture, struct nrom_frame_result result)
+void draw_nes_emu(SDL_Renderer *renderer, SDL_Texture *sdltexture, struct system_frame_result result)
 {
     uint32_t texture[240*256];
 
@@ -314,7 +317,7 @@ bool neske_ui_event(struct neske_ui *ui, SDL_Event *event)
 
                 if (ui->emulating)
                 {
-                    nrom_update_controller(ui->nrom, ui->controller);
+                    player_set_controller(&ui->player, ui->controller);
                 }
             }
             else if (ui->show_window == WIN_CONFIG)
@@ -351,7 +354,12 @@ static void SDLCALL on_rom_open(void *userdata, const char *const *filelist, int
     ui->emulating = false;
     ui->error = false;
     ui->crash = false;
-    if (!load_rom_from_file(*filelist, ui->nrom))
+    if (ui->player.is_valid)
+    {
+        player_free(&ui->player);
+    }
+    ui->player = load_rom_from_file(*filelist, ui->apu_mux);
+    if (!ui->player.is_valid)
     {
         ui->error = true;
     }
@@ -380,8 +388,8 @@ void neske_ui_update(struct neske_ui *ui)
     }
     else if (ui->emulating)
     {
-        draw_nes_emu(ui->renderer, ui->tex_backbuffer, nrom_frame(ui->nrom));
-        if (ui->nrom->cpu.crash)
+        draw_nes_emu(ui->renderer, ui->tex_backbuffer, player_frame(&ui->player));
+        if (player_crash(&ui->player))
         {
             ui->crash = true;
         }
@@ -515,7 +523,7 @@ void neske_ui_update(struct neske_ui *ui)
 
         if (draw_widget(ui, "Unload ROM", 1, 25, 47, 11))
         {
-            nrom_reset(ui->nrom);
+            player_reset(&ui->player);
             ui->emulating = false;
         }
 
@@ -523,7 +531,7 @@ void neske_ui_update(struct neske_ui *ui)
         {
             printf("Reset\n");
             ui->crash = false;
-            nrom_reset(ui->nrom);
+            player_reset(&ui->player);
         }
     }
 
@@ -570,21 +578,21 @@ void neske_ui_update(struct neske_ui *ui)
 
 void audio_callback(void *userdata, SDL_AudioStream *stream, int additional_amount, int total_amount)
 {
-    struct nrom *nrom = userdata;
-    struct apu *apu = &nrom->apu;
+    struct neske_ui *ui = userdata;
 
-    uint16_t buf[16384];
+    uint16_t buf[16384] = { 0 };
 
-    nrom->apu_mux.lock(nrom->apu_mux.mux);
-    apu->samples_read += additional_amount/2;
-    apu_catchup_samples(apu, additional_amount/2);
-    apu_ring_read(apu, buf, additional_amount/2);
-    nrom->apu_mux.unlock(nrom->apu_mux.mux);
+    if (ui->player.is_valid)
+    {
+        // TODO: Maybe i should lock the apu mux here?
+        player_generate_samples(&ui->player, buf, additional_amount/2);
+    }
+
     SDL_PutAudioStreamData(stream, buf, additional_amount);
 }
 
-int main(int argc, char* argv[]) {
-    struct nrom nrom = { 0 };
+int main(int argc, char* argv[])
+{
     SDL_Window *window;
     SDL_Renderer *renderer;
     bool done = false;
@@ -625,9 +633,8 @@ int main(int argc, char* argv[]) {
 
     SDL_SetRenderScale(renderer, 3, 3);
 
-    nrom.apu_mux = sdl_mux_make();
-    struct neske_ui neske_ui = neske_ui_init(renderer, window, &nrom);
-    SDL_AudioStream *audio_device_stream = SDL_OpenAudioDeviceStream(audio_device, &audio_in, audio_callback, &nrom);
+    struct neske_ui neske_ui = neske_ui_init(renderer, window);
+    SDL_AudioStream *audio_device_stream = SDL_OpenAudioDeviceStream(audio_device, &audio_in, audio_callback, &neske_ui);
     SDL_ResumeAudioStreamDevice(audio_device_stream);
     while (!done) {
         SDL_Event event;

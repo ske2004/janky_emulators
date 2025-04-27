@@ -1,6 +1,5 @@
 #include "neske.h"
 #include <assert.h>
-#include <stdio.h>
 #include <string.h>
 
 uint8_t *ppu_vram_get_ptr(struct ppu *ppu, uint16_t addr)
@@ -18,10 +17,13 @@ uint8_t *ppu_vram_get_ptr(struct ppu *ppu, uint16_t addr)
             {
                 addr -= 0x400;
             }
-
-            if (addr >= 0x2C00 && addr < 0x3000)
+            else if (addr >= 0x2800 && addr < 0x2C00)
             {
-                addr -= 0xC00;
+                addr -= 0x400;
+            }
+            else if (addr >= 0x2C00 && addr < 0x3000)
+            {
+                addr -= 0x800;
             }
         }
         else
@@ -48,30 +50,40 @@ uint8_t *ppu_vram_get_ptr(struct ppu *ppu, uint16_t addr)
         return ppu->pallete + addr;
     }
 
-    return ppu->vram + addr;
+    return NULL;
 }
 
 uint8_t ppu_vram_read(struct ppu *ppu, uint16_t addr)
 {
-    return ppu_vram_get_ptr(ppu, addr)[0];
+    uint8_t *ptr = ppu_vram_get_ptr(ppu, addr);
+    if (ptr == NULL)
+    {
+        return 0;
+    }
+
+    return ptr[0];
 }
 
 void ppu_vram_write(struct ppu *ppu, uint16_t addr, uint8_t val)
 {
-    ppu_vram_get_ptr(ppu, addr)[0] = val;
+    if (addr >= 0x0000 && addr < 0x2000)
+    {
+        return;
+    }
+
+    uint8_t *ptr = ppu_vram_get_ptr(ppu, addr);
+    if (ptr == NULL)
+    {
+        return;
+    }
+
+    ptr[0] = val;
 }
 
 struct ppu ppu_mk()
 {
     struct ppu ppu = { 0 };
     return ppu;
-}
-
-void ppu_write_chr(struct ppu *ppu, uint8_t *chr, uint32_t chr_size)
-{
-    assert(chr_size <= 0x2000);
-
-    memcpy(ppu->vram, chr, chr_size);
 }
 
 uint16_t ppu_get_addr(struct ppu *ppu)

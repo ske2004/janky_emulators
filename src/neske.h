@@ -158,9 +158,6 @@ struct ppu
 };
 
 struct ppu ppu_mk();
-void ppu_write_chr(struct ppu *ppu, uint8_t *chr, uint32_t chr_size);
-uint16_t ppu_get_addr(struct ppu *ppu);
-void ppu_set_addr(struct ppu *ppu, uint16_t addr);
 void ppu_write(struct ppu *ppu, enum ppu_io io, uint8_t data);
 void ppu_vblank(struct ppu *ppu);
 uint8_t ppu_vram_read(struct ppu *ppu, uint16_t addr);
@@ -374,6 +371,7 @@ struct system
     uint8_t controller_strobe;
 
     uint8_t memory[1<<16];
+    struct ricoh_mem_interface mem;
 };
 
 struct system_frame_result
@@ -381,15 +379,18 @@ struct system_frame_result
     uint8_t screen[240*256];
 };
 
-struct system system_init(struct mux_api apu_mux);
+struct system system_init(struct mux_api apu_mux, struct ricoh_mem_interface mem);
 uint16_t system_get_vector(struct system *system, enum vector vec);
 void system_update_controller(struct system *system, struct controller_state cs);
+void system_generate_samples(struct system *system, uint16_t *samples, uint32_t count);
+uint8_t system_mem_read(struct system *system, uint16_t addr);
+void system_mem_write(struct system *system, uint16_t addr, uint8_t val);
 uint8_t system_load(uint8_t *ines, struct system *out);
 struct ricoh_mem_interface system_get_memory_interface(struct system *system);
 struct system_frame_result system_frame(struct system *system);
 void system_reset(struct system *system);
 
-// MAPPER.H
+// PLAYER.H
 
 struct mapper_data
 {
@@ -398,25 +399,52 @@ struct mapper_data
     uint8_t prg_banks;
     uint8_t chr_banks;
     uint8_t mapper_number;
+    uint16_t prg_size;
+    uint16_t chr_size;
     enum ppu_mir mirroring;
 };
 
-struct mapper
+struct mapper_vtbl
 {
-    struct system system;
-    void *mapper_data;
-    void (*init)(struct mapper *mapper);
-    void (*reset)(struct mapper *mapper);
-    uint8_t (*mem_read)(struct mapper *mapper, uint16_t addr);
-    void (*mem_write)(struct mapper *mapper, uint16_t addr, uint8_t val);
+    void* (*new)(struct mapper_data data, struct mux_api apu_mux);
+    void (*free)(void *mapper_data);
+    struct system_frame_result (*frame)(void *mapper_data);
+    void (*generate_samples)(void *mapper_data, uint16_t *samples, uint32_t count);
+    void (*reset)(void *mapper_data);
+    bool (*crash)(void *mapper_data);
+    void (*set_controller)(void *mapper_data, struct controller_state controller);
 };
 
-struct mapper mapper_init(uint8_t *ines, struct mux_api apu_mux);
-void mapper_free(struct mapper *mapper);
-void mapper_reset(struct mapper *mapper);
-void mapper_set_controller(struct mapper *mapper, struct controller_state controller);
-struct system_frame_result mapper_frame(struct mapper *mapper);
+struct player
+{
+    bool is_valid;
+    void *mapper_data;
+    struct mapper_vtbl *vtbl;
+};
 
+struct player player_init(uint8_t *ines, struct mux_api apu_mux);
+void player_free(struct player *player);
+void player_reset(struct player *player);
+void player_set_controller(struct player *player, struct controller_state controller);
+struct system_frame_result player_frame(struct player *player);
+void player_generate_samples(struct player *player, uint16_t *samples, uint32_t count);
+bool player_crash(struct player *player);
+// NROM.H
 
+struct nrom
+{
+    bool is_mirrored;
+    uint8_t *rom;
+    struct system system;
+};
+
+extern struct mapper_vtbl nrom_vtbl;
+void* nrom_new(struct mapper_data data, struct mux_api apu_mux);
+void nrom_free(void *mapper_data);
+struct system_frame_result nrom_frame(void *mapper_data);
+void nrom_generate_samples(void *mapper_data, uint16_t *samples, uint32_t count);
+void nrom_reset(void *mapper_data);
+bool nrom_crash(void *mapper_data);
+void nrom_set_controller(void *mapper_data, struct controller_state controller);
 
 #endif

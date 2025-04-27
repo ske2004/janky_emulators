@@ -1,18 +1,20 @@
 #include "neske.h"
 #include <assert.h>
-#include <assert.h>
+#include <string.h>
+#include <stdio.h>
 
-struct system system_init(struct mux_api apu_mux)
+struct system system_init(struct mux_api apu_mux, struct ricoh_mem_interface mem)
 {
     struct system system = { 0 };
     system.apu_mux = apu_mux;
     system.decoder = make_ricoh_decoder();
     system.ppu = ppu_mk();
-    apu_init(&system.apu);
+    system.mem = mem;
+    system_reset(&system);
     return system;
 }
 
-static void apu_write_catchup(struct system *system, enum apu_reg reg, uint8_t val)
+static void apu_write_safe(struct system *system, enum apu_reg reg, uint8_t val)
 {
     system->apu_mux.lock(system->apu_mux.mux);
     apu_reg_write(&system->apu, reg, val);
@@ -36,22 +38,22 @@ void system_mem_write(struct system *system, uint16_t addr, uint8_t data)
         case 0x2006: ppu_write(&system->ppu, PPUIO_ADDR, data); break;
         case 0x2007: ppu_write(&system->ppu, PPUIO_DATA, data); break;
 
-        case 0x4000: apu_write_catchup(system, APU_PULSE1_DDLC_NNNN, data); break; // pulse 1
-        case 0x4001: apu_write_catchup(system, APU_PULSE1_EPPP_NSSS, data); break;
-        case 0x4002: apu_write_catchup(system, APU_PULSE1_LLLL_LLLL, data); break;
-        case 0x4003: apu_write_catchup(system, APU_PULSE1_LLLL_LHHH, data); break; 
-        case 0x4004: apu_write_catchup(system, APU_PULSE2_DDLC_NNNN, data); break; // pulse 2
-        case 0x4005: apu_write_catchup(system, APU_PULSE2_EPPP_NSSS, data); break;
-        case 0x4006: apu_write_catchup(system, APU_PULSE2_LLLL_LLLL, data); break;
-        case 0x4007: apu_write_catchup(system, APU_PULSE2_LLLL_LHHH, data); break;
-        case 0x4008: apu_write_catchup(system, APU_TRIANG_CRRR_RRRR, data); break; // triangle
-        case 0x400A: apu_write_catchup(system, APU_TRIANG_LLLL_LLLL, data); break;
-        case 0x400B: apu_write_catchup(system, APU_TRIANG_LLLL_LHHH, data); break;
-        case 0x400C: apu_write_catchup(system, APU_NOISER_XXLC_VVVV, data); break; // noise
-        case 0x400E: apu_write_catchup(system, APU_NOISER_MXXX_PPPP, data); break;
-        case 0x400F: apu_write_catchup(system, APU_NOISER_LLLL_LXXX, data); break;
-        case 0x4015: apu_write_catchup(system, APU_STATUS_IFXD_NT21, data); break; // status
-        case 0x4017: apu_write_catchup(system, APU_STATUS_MIXX_XXXX, data); break; // misc
+        case 0x4000: apu_write_safe(system, APU_PULSE1_DDLC_NNNN, data); break; // pulse 1
+        case 0x4001: apu_write_safe(system, APU_PULSE1_EPPP_NSSS, data); break;
+        case 0x4002: apu_write_safe(system, APU_PULSE1_LLLL_LLLL, data); break;
+        case 0x4003: apu_write_safe(system, APU_PULSE1_LLLL_LHHH, data); break; 
+        case 0x4004: apu_write_safe(system, APU_PULSE2_DDLC_NNNN, data); break; // pulse 2
+        case 0x4005: apu_write_safe(system, APU_PULSE2_EPPP_NSSS, data); break;
+        case 0x4006: apu_write_safe(system, APU_PULSE2_LLLL_LLLL, data); break;
+        case 0x4007: apu_write_safe(system, APU_PULSE2_LLLL_LHHH, data); break;
+        case 0x4008: apu_write_safe(system, APU_TRIANG_CRRR_RRRR, data); break; // triangle
+        case 0x400A: apu_write_safe(system, APU_TRIANG_LLLL_LLLL, data); break;
+        case 0x400B: apu_write_safe(system, APU_TRIANG_LLLL_LHHH, data); break;
+        case 0x400C: apu_write_safe(system, APU_NOISER_XXLC_VVVV, data); break; // noise
+        case 0x400E: apu_write_safe(system, APU_NOISER_MXXX_PPPP, data); break;
+        case 0x400F: apu_write_safe(system, APU_NOISER_LLLL_LXXX, data); break;
+        case 0x4015: apu_write_safe(system, APU_STATUS_IFXD_NT21, data); break; // status
+        case 0x4017: apu_write_safe(system, APU_STATUS_MIXX_XXXX, data); break; // misc
 
         case 0x4014: // OAMDMA
             ppu_write_oam(&system->ppu, system->memory + (((uint16_t)data)<<8));
@@ -64,7 +66,6 @@ void system_mem_write(struct system *system, uint16_t addr, uint8_t data)
             }
             break;
         default:
-            // if (system->prgsize == 1 && addr >= 0xC000) addr -= 0x4000;
             system->memory[addr] = data;
             break;
     }
@@ -75,7 +76,16 @@ void system_update_controller(struct system *system, struct controller_state cs)
     system->controller = cs;
 }
 
-static uint8_t _system_mem_read(struct system *system, uint16_t addr)
+void system_generate_samples(struct system *system, uint16_t *samples, uint32_t count)
+{
+    system->apu_mux.lock(system->apu_mux.mux);
+    system->apu.samples_read += count;
+    apu_catchup_samples(&system->apu, count);
+    apu_ring_read(&system->apu, samples, count);
+    system->apu_mux.unlock(system->apu_mux.mux);
+}
+
+uint8_t system_mem_read(struct system *system, uint16_t addr)
 {
     if (addr >= 0x2000 && addr < 0x4000)
     {
@@ -94,11 +104,9 @@ static uint8_t _system_mem_read(struct system *system, uint16_t addr)
             val = apu_reg_read(&system->apu, APU_STATUS_IFXD_NT21);
             system->apu_mux.unlock(system->apu_mux.mux);
             return val;
-            break;
         case 0x4017:
-            return 0; // controller, not apu, confusing ya
+            return 0; // controller 2, not apu, confusing ya
         case 0x4016:
-
             if (system->controller_strobe != 8)
             {
                 return system->controller.btns[system->controller_strobe++];
@@ -107,10 +115,8 @@ static uint8_t _system_mem_read(struct system *system, uint16_t addr)
             {
                 return 1;
             }
-
             break;
         default: 
-            // if (system->prgsize == 1 && addr >= 0xC000) addr -= 0x4000;
             return system->memory[addr];
     }
 
@@ -121,34 +127,27 @@ uint16_t system_get_vector(struct system *system, enum vector vec)
 {
     switch (vec)
     {
-        case VEC_NMI: return   _system_mem_read(system, 0xFFFA) | (_system_mem_read(system, 0xFFFB) << 8);
-        case VEC_RESET: return _system_mem_read(system, 0xFFFC) | (_system_mem_read(system, 0xFFFD) << 8);
-        case VEC_IRQ: return   _system_mem_read(system, 0xFFFE) | (_system_mem_read(system, 0xFFFF) << 8);
+        case VEC_NMI: return   system->mem.get(system->mem.instance, 0xFFFA) | (system->mem.get(system->mem.instance, 0xFFFB) << 8);
+        case VEC_RESET: return system->mem.get(system->mem.instance, 0xFFFC) | (system->mem.get(system->mem.instance, 0xFFFD) << 8);
+        case VEC_IRQ: return   system->mem.get(system->mem.instance, 0xFFFE) | (system->mem.get(system->mem.instance, 0xFFFF) << 8);
     }
 
     return 0;
 }
 
 
-void system_reset(struct system *system, uint16_t pc)
+void system_reset(struct system *system)
 {
+    printf("system_reset\n");
     system->cpu = (struct ricoh_state){ 0 };
-    system->cpu.pc = pc;
+    system->cpu.pc = system_get_vector(system, VEC_RESET);
+    printf("system_reset pc: %x\n", system->cpu.pc);
     system->cpu.flags = 0x24;
     system->cpu.sp = 0xFD;
     system->cpu.cycles = 7;
     system->apu = (struct apu){ 0 };
     apu_init(&system->apu);
-}
-
-
-struct ricoh_mem_interface system_get_memory_interface(struct nrom *nrom)
-{
-    return (struct ricoh_mem_interface){
-        system,
-        _system_mem_read,
-        _system_mem_write,
-    };
+    printf("system_reset done\n");
 }
 
 enum
@@ -157,13 +156,11 @@ enum
     DEV_PPU,
 };
 
-struct system_frame_result nrom_frame(struct nrom *nrom)
+struct system_frame_result system_frame(struct system *system)
 {
-    struct ricoh_mem_interface mem = system_get_memory_interface(nrom);
-
     uint64_t cycles_start = system->cpu.cycles;
 
-    while (!system->cpu.crash && (nrom->cpu.cycles-cycles_start) < 500000)
+    while (!system->cpu.crash && (system->cpu.cycles-cycles_start) < 500000)
     {
         bool nmi_occured = false;
 
@@ -179,13 +176,13 @@ struct system_frame_result nrom_frame(struct nrom *nrom)
         {
         case DEV_CPU:
             {
-                struct instr_decoded decoded = ricoh_decode_instr(&system->decoder, &mem, nrom->cpu.pc);
-                ricoh_run_instr(&system->cpu, decoded, &mem);
+                struct instr_decoded decoded = ricoh_decode_instr(&system->decoder, &system->mem, system->cpu.pc);
+                ricoh_run_instr(&system->cpu, decoded, &system->mem);
             }
             break;
         case DEV_PPU:
             {
-                nmi_occured = ppu_cycle(&system->ppu, &mem);
+                nmi_occured = ppu_cycle(&system->ppu, &system->mem);
             }
             break;
         }
@@ -194,7 +191,7 @@ struct system_frame_result nrom_frame(struct nrom *nrom)
         {
             if (ppu_nmi_enabled(&system->ppu))
             {
-                ricoh_do_interrupt(&system->cpu, &mem, nrom_get_vector(nrom, VEC_NMI));
+                ricoh_do_interrupt(&system->cpu, &system->mem, system_get_vector(system, VEC_NMI));
             }
             break;
         }
