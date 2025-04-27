@@ -495,7 +495,7 @@ void neske_ui_update(struct neske_ui *ui)
                 ui->show_window = WIN_NONE;
             }
 
-            if (draw_widget(ui, "ABOUT_CLOSE", 143, 140, 60, 13))
+            if (draw_widget(ui, "ABOUT_CLOSE", 152, 140, 51, 13))
             {
                 ui->show_window = WIN_NONE;
             }
