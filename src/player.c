@@ -1,5 +1,9 @@
 #include "neske.h"
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <assert.h>
+
 struct mapper_data mapper_get_data(uint8_t *ines)
 {
     struct mapper_data data = { 0 };
@@ -19,7 +23,27 @@ struct mapper_data mapper_get_data(uint8_t *ines)
     data.mapper_number = (ines[6] >> 4) | (ines[7] & 0xF0);
     data.mirroring = (ines[6] & 1) ? PPUMIR_VER : PPUMIR_HOR;
 
+    assert(data.prg_size != 0);
+
     return data;
+}
+
+struct mapper_rom mapper_rom_copy(struct mapper_data *data)
+{
+    uint8_t *data_copy = malloc(data->prg_size+data->chr_size);
+    if (!data_copy)
+    {
+        return (struct mapper_rom){ 0 };
+    }
+
+    memcpy(data_copy, data->ines+16, data->prg_size+data->chr_size);
+
+    return (struct mapper_rom){ data->prg_size, data->chr_size, data_copy, data_copy+data->prg_size };
+}
+
+void mapper_rom_free(struct mapper_rom *rom)
+{
+    free(rom->prg);
 }
 
 struct player player_init(uint8_t *ines, struct mux_api apu_mux)
@@ -36,11 +60,9 @@ struct player player_init(uint8_t *ines, struct mux_api apu_mux)
 
     switch (data.mapper_number)
     {
-        case 0:
-            player.vtbl = &nrom_vtbl;
-            break;
-        default:
-            return player;
+        case 0: player.vtbl = &nrom_vtbl; break;
+        case 1: player.vtbl = &mmc1_vtbl; break;
+        default: return player;
     }
 
     player.mapper_data = player.vtbl->new(data, apu_mux);

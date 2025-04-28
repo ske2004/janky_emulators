@@ -112,6 +112,7 @@ enum ppu_io
 
 enum ppu_mir
 {
+    PPUMIR_ONE,
     PPUMIR_VER,
     PPUMIR_HOR,
 };
@@ -265,7 +266,7 @@ struct apu_writer
 
 #define APU_SAMPLE_RING_LEN (16384)
 
-struct apu_high_pass
+struct apu_pass
 {
     float last_in;
     float last_out;
@@ -294,7 +295,7 @@ struct apu
     struct apu_tri_chan tri;
     struct apu_noise_chan noise;
 
-    struct apu_high_pass high_pass;
+    struct apu_pass high_pass;
 };
 
 void apu_init(struct apu *apu);
@@ -392,6 +393,14 @@ void system_reset(struct system *system);
 
 // PLAYER.H
 
+struct mapper_rom
+{
+    size_t prg_size;
+    size_t chr_size;
+    uint8_t *prg;
+    uint8_t *chr;
+};
+
 struct mapper_data
 {
     bool is_valid;
@@ -399,10 +408,14 @@ struct mapper_data
     uint8_t prg_banks;
     uint8_t chr_banks;
     uint8_t mapper_number;
-    uint16_t prg_size;
-    uint16_t chr_size;
+    size_t prg_size;
+    size_t chr_size;
     enum ppu_mir mirroring;
 };
+
+struct mapper_data mapper_get_data(uint8_t *ines);
+struct mapper_rom mapper_rom_copy(struct mapper_data *data);
+void mapper_rom_free(struct mapper_rom *rom);
 
 struct mapper_vtbl
 {
@@ -446,5 +459,35 @@ void nrom_generate_samples(void *mapper_data, uint16_t *samples, uint32_t count)
 void nrom_reset(void *mapper_data);
 bool nrom_crash(void *mapper_data);
 void nrom_set_controller(void *mapper_data, struct controller_state controller);
+
+// MMC1.H
+
+typedef uint8_t shift_register;
+
+struct shift_register_result
+{
+    bool do_write;
+    uint8_t value;
+};
+
+struct mmc1
+{
+    struct mapper_rom rom;
+    struct system system;
+    shift_register shift_register;
+    uint8_t reg_ctrl;
+    uint8_t reg_prg_bank;
+    uint8_t reg_chr_bank_1;
+    uint8_t reg_chr_bank_2;
+};
+
+extern struct mapper_vtbl mmc1_vtbl;
+void* mmc1_new(struct mapper_data data, struct mux_api apu_mux);
+void mmc1_free(void *mapper_data);
+struct system_frame_result mmc1_frame(void *mapper_data);
+void mmc1_generate_samples(void *mapper_data, uint16_t *samples, uint32_t count);
+void mmc1_reset(void *mapper_data);
+bool mmc1_crash(void *mapper_data);
+void mmc1_set_controller(void *mapper_data, struct controller_state controller);
 
 #endif

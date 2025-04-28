@@ -41,15 +41,6 @@ static void _nrom_mem_write(void *mapper_data, uint16_t addr, uint8_t val)
     system_mem_write(&mapper->system, map_memory_addr(mapper, addr), val);
 }
 
-static struct ricoh_mem_interface _mem_interface(struct nrom *mapper)
-{
-    return (struct ricoh_mem_interface){
-        mapper,
-        _nrom_mem_read,
-        _nrom_mem_write,
-    };
-}
-
 void* nrom_new(struct mapper_data data, struct mux_api apu_mux)
 {
     size_t prg_offset = 16;
@@ -72,7 +63,11 @@ void* nrom_new(struct mapper_data data, struct mux_api apu_mux)
     mapper->rom = malloc(data.prg_size);
     memcpy(mapper->rom, data.ines+prg_offset, data.prg_size);
 
-    mapper->system = system_init(apu_mux, _mem_interface(mapper));
+    mapper->system = system_init(apu_mux, (struct ricoh_mem_interface){
+        .instance = mapper,
+        .get = _nrom_mem_read,
+        .set = _nrom_mem_write,
+    });
     mapper->system.ppu.pins.mirroring_mode = data.mirroring;
     memcpy(mapper->system.ppu.pins.chr, data.ines+chr_offset, data.chr_size);
 

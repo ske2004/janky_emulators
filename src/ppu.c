@@ -11,27 +11,31 @@ uint8_t *ppu_vram_get_ptr(struct ppu *ppu, uint16_t addr)
 
     if (addr >= 0x2000 && addr < 0x3000)
     {
-        if (ppu->pins.mirroring_mode == PPUMIR_HOR)
+        switch (ppu->pins.mirroring_mode)
         {
-            if (addr >= 0x2400 && addr < 0x2800)
-            {
-                addr -= 0x400;
-            }
-            else if (addr >= 0x2800 && addr < 0x2C00)
-            {
-                addr -= 0x400;
-            }
-            else if (addr >= 0x2C00 && addr < 0x3000)
-            {
-                addr -= 0x800;
-            }
-        }
-        else
-        {
-            if (addr >= 0x2800 && addr < 0x3000)
-            {
-                addr -= 0x800;
-            }
+            case PPUMIR_HOR:
+                if (addr >= 0x2400 && addr < 0x2800)
+                {
+                    addr -= 0x400;
+                }
+                else if (addr >= 0x2800 && addr < 0x2C00)
+                {
+                    addr -= 0x400;
+                }
+                else if (addr >= 0x2C00 && addr < 0x3000)
+                {
+                    addr -= 0x800;
+                }
+                break;
+            case PPUMIR_VER:
+                if (addr >= 0x2800 && addr < 0x3000)
+                {
+                    addr -= 0x800;
+                }
+                break;
+            case PPUMIR_ONE:
+                addr = addr % 0x400 + 0x2000;
+                break;
         }
 
         return ppu->vram + (addr-0x2000);
@@ -66,11 +70,6 @@ uint8_t ppu_vram_read(struct ppu *ppu, uint16_t addr)
 
 void ppu_vram_write(struct ppu *ppu, uint16_t addr, uint8_t val)
 {
-    if (addr >= 0x0000 && addr < 0x2000)
-    {
-        return;
-    }
-
     uint8_t *ptr = ppu_vram_get_ptr(ppu, addr);
     if (ptr == NULL)
     {

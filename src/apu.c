@@ -49,15 +49,14 @@ static void pulse_reg_write(struct apu_pulse_chan *pulse, uint8_t reg, uint8_t v
         // printf("P1S: %d %d %d %d\n", pulse->sweep_enable, pulse->sweep_period, pulse->sweep_negate, pulse->sweep_shift);
         break;
     case 2:
-        pulse->timer_init            = value;
-        // pulse->timer                  = pulse->timer_init;
+        pulse->timer_init            &= 0xFF00;
+        pulse->timer_init            |= value;
         // printf("P1T %d\n", pulse->timer_init);
         break;
     case 3:
         pulse->flag_start            = 1; // restart envelope
         pulse->timer_init           &= 0xFF;
         pulse->timer_init           |= (value&0x7) << 8;
-        // pulse->timer                 = pulse->timer_init;
         if (pulse->enabled)
         {
             pulse->length            = length_lut[value>>3];
@@ -85,12 +84,15 @@ void apu_reg_write(struct apu *apu, enum apu_reg reg, uint8_t value)
     case APU_TRIANG_CRRR_RRRR:
         apu->tri.flag_control = value >> 7;
         apu->tri.counter_init = value & 0x7F;
-        // apu->tri.counter      = apu->tri.counter_init;
+        if (apu->tri.flag_control)
+        {
+            apu->tri.counter      = apu->tri.counter_init;
+        }
         // printf("T1A: %d %d\n", apu->tri.flag_control, apu->tri.counter_init);
         break;
     case APU_TRIANG_LLLL_LLLL:
-        apu->tri.timer_init = value;
-        apu->tri.timer      = apu->tri.timer_init;
+        apu->tri.timer_init &= 0xFF00;
+        apu->tri.timer_init |= value;
         // printf("T1B: %d\n", value);
         break;
     case APU_TRIANG_LLLL_LHHH:
@@ -101,7 +103,6 @@ void apu_reg_write(struct apu *apu, enum apu_reg reg, uint8_t value)
         }
         apu->tri.timer_init &= 0xFF;
         apu->tri.timer_init |= (value&0x7)<<8;
-        apu->tri.timer       = apu->tri.timer_init;
         // printf("T1C: %d %d\n", apu->tri.length, apu->tri.timer_init);
         break;
 
@@ -191,14 +192,14 @@ uint8_t apu_reg_read(struct apu *apu, enum apu_reg reg)
     return 0;
 }
 
-static float do_high_pass_filter(struct apu_high_pass *high_pass, float sample)
+static float do_high_pass_filter(struct apu_pass *pass, float sample)
 {
     float rc = 1.0/(37.0*2*3.1415);
     float dt = 1.0/44100.0;
     float alpha = rc/(rc + dt);
-    float value = alpha * high_pass->last_out + alpha * (sample - high_pass->last_in);
-    high_pass->last_in = sample;
-    high_pass->last_out = value;
+    float value = alpha * pass->last_out + alpha * (sample - pass->last_in);
+    pass->last_in = sample;
+    pass->last_out = value;
     return value;
 }
 
@@ -222,7 +223,7 @@ static int16_t read_sample(struct apu *apu)
 
     uint8_t tri = 0;
 
-    if (apu->tri.length != 0)
+    if (apu->tri.length != 0 && apu->tri.counter != 0 && apu->tri.timer_init > 7)
     {
         tri = apu->tri.sequence-16;
         if (apu->tri.sequence < 16) tri = 15-apu->tri.sequence;
@@ -329,7 +330,7 @@ static void pulse_length_sweep_cycle(struct apu_pulse_chan *pulse)
     }
 }
 
-static void tri_length_cycle(struct apu_tri_chan *tri)
+static void tri_envelope_cycle(struct apu_tri_chan *tri)
 {
     if (tri->flag_reload) 
     {
@@ -436,7 +437,7 @@ static void envelope_cycle(struct apu *apu)
 {
     pulse_envelope_cycle(&apu->pulse1);
     pulse_envelope_cycle(&apu->pulse2);
-    tri_length_cycle(&apu->tri);
+    tri_envelope_cycle(&apu->tri);
     noise_envelope_cycle(&apu->noise);
 }
 
