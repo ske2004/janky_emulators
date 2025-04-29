@@ -490,4 +490,44 @@ void mmc1_reset(void *mapper_data);
 bool mmc1_crash(void *mapper_data);
 void mmc1_set_controller(void *mapper_data, struct controller_state controller);
 
+// UNROM.H
+
+struct unrom
+{
+    struct mapper_rom rom;
+    struct system system;
+    uint8_t prg_select;
+};
+
+extern struct mapper_vtbl unrom_vtbl;
+void* unrom_new(struct mapper_data data, struct mux_api apu_mux);
+void unrom_free(void *mapper_data);
+struct system_frame_result unrom_frame(void *mapper_data);
+void unrom_generate_samples(void *mapper_data, uint16_t *samples, uint32_t count);
+void unrom_reset(void *mapper_data);
+bool unrom_crash(void *mapper_data);
+void unrom_set_controller(void *mapper_data, struct controller_state controller);
+
+// M228.H -- MAKE YOUR SELECTION, NOW!
+
+struct m228
+{
+    struct mapper_rom rom;
+    struct system system;
+    uint8_t reg_data;
+    uint16_t reg_addr;
+    uint8_t serial_id;
+};
+
+extern struct mapper_vtbl m228_vtbl;
+void* m228_new(struct mapper_data data, struct mux_api apu_mux);
+void m228_free(void *mapper_data);
+struct system_frame_result m228_frame(void *mapper_data);
+void m228_generate_samples(void *mapper_data, uint16_t *samples, uint32_t count);
+void m228_reset(void *mapper_data);
+bool m228_crash(void *mapper_data);
+void m228_set_controller(void *mapper_data, struct controller_state controller);
+
+
+
 #endif

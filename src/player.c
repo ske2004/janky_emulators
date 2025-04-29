@@ -23,6 +23,8 @@ struct mapper_data mapper_get_data(uint8_t *ines)
     data.mapper_number = (ines[6] >> 4) | (ines[7] & 0xF0);
     data.mirroring = (ines[6] & 1) ? PPUMIR_VER : PPUMIR_HOR;
 
+    printf("Mapper number: %d\n", data.mapper_number);
+
     assert(data.prg_size != 0);
 
     return data;
@@ -62,6 +64,8 @@ struct player player_init(uint8_t *ines, struct mux_api apu_mux)
     {
         case 0: player.vtbl = &nrom_vtbl; break;
         case 1: player.vtbl = &mmc1_vtbl; break;
+        case 2: player.vtbl = &unrom_vtbl; break;
+        case 228: player.vtbl = &m228_vtbl; break;
         default: return player;
     }
 

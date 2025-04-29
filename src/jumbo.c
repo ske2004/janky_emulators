@@ -7,3 +7,5 @@
 #include "system.c"
 #include "mapper/nrom.c"
 #include "mapper/mmc1.c"
+#include "mapper/unrom.c"
+#include "mapper/m228.c"

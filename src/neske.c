@@ -3,6 +3,7 @@
 #include "SDL3/SDL_dialog.h"
 #include "SDL3/SDL_error.h"
 #include "SDL3/SDL_events.h"
+#include "SDL3/SDL_gamepad.h"
 #include "SDL3/SDL_image.h"
 #include "SDL3/SDL_init.h"
 #include "SDL3/SDL_keyboard.h"
@@ -212,6 +213,16 @@ struct neske_ui neske_ui_init(SDL_Renderer *renderer, SDL_Window *window)
 {
     struct neske_ui ui = { 0 };
 
+    int count = 1;
+    SDL_JoystickID *ids = SDL_GetJoysticks(&count);
+
+    if (count > 0)
+        if (!SDL_OpenGamepad(ids[0]))
+        {
+            printf("Error opening gamepad: %s\n", SDL_GetError());
+        }
+
+
     ui.apu_mux = sdl_mux_make();
     ui.btn_selected = -1;
     ui.mutex = SDL_CreateMutex();
@@ -299,8 +310,48 @@ bool neske_ui_event(struct neske_ui *ui, SDL_Event *event)
 
     switch (event->type)
     {
-    case SDL_EVENT_MOUSE_BUTTON_UP:
-        if (event->button.button == SDL_BUTTON_LEFT) ui->mouse_released = true;
+        case SDL_EVENT_MOUSE_BUTTON_UP:
+            if (event->button.button == SDL_BUTTON_LEFT) ui->mouse_released = true;
+            break;
+        case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+        case SDL_EVENT_GAMEPAD_BUTTON_UP:
+            printf("Gamepad button: %d\n", event->gbutton.button);
+            if (ui->show_window == WIN_NONE)
+            {
+                switch (event->gbutton.button)
+                {
+                case SDL_GAMEPAD_BUTTON_SOUTH:
+                    ui->controller.btns[BTN_A] = event->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN;
+                    break;
+                case SDL_GAMEPAD_BUTTON_WEST:
+                    ui->controller.btns[BTN_B] = event->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN;
+                    break;
+                case SDL_GAMEPAD_BUTTON_START:
+                    ui->controller.btns[BTN_START] = event->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN;
+                    break;
+                case SDL_GAMEPAD_BUTTON_BACK:
+                    ui->controller.btns[BTN_SELECT] = event->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN;
+                    break;
+                case SDL_GAMEPAD_BUTTON_DPAD_UP:
+                    ui->controller.btns[BTN_UP] = event->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN;
+                    break;
+                case SDL_GAMEPAD_BUTTON_DPAD_DOWN:
+                    ui->controller.btns[BTN_DOWN] = event->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN;
+                    break;
+                case SDL_GAMEPAD_BUTTON_DPAD_LEFT:
+                    ui->controller.btns[BTN_LEFT] = event->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN;
+                    break;
+                case SDL_GAMEPAD_BUTTON_DPAD_RIGHT:
+                    ui->controller.btns[BTN_RIGHT] = event->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN;
+                    break;
+                }
+
+                if (ui->emulating)
+                {
+                    player_set_controller(&ui->player, ui->controller);
+                }
+            }
+            break;
         case SDL_EVENT_KEY_DOWN:
         case SDL_EVENT_KEY_UP:
             if (ui->show_window == WIN_NONE)
@@ -597,7 +648,7 @@ int main(int argc, char* argv[])
     SDL_Renderer *renderer;
     bool done = false;
 
-    SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO);
+    SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD);
 
     window = SDL_CreateWindow(
         "neske",
