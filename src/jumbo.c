@@ -9,3 +9,4 @@
 #include "mapper/mmc1.c"
 #include "mapper/unrom.c"
 #include "mapper/m228.c"
+#include "mapper/cnrom.c"

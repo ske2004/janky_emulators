@@ -66,6 +66,7 @@ struct player player_init(uint8_t *ines, struct mux_api apu_mux)
         case 1: player.vtbl = &mmc1_vtbl; break;
         case 2: player.vtbl = &unrom_vtbl; break;
         case 228: player.vtbl = &m228_vtbl; break;
+        case 3: player.vtbl = &cnrom_vtbl; break;
         default: return player;
     }
 
@@ -85,34 +86,55 @@ struct player player_init(uint8_t *ines, struct mux_api apu_mux)
 
 struct system_frame_result player_frame(struct player *player)
 {
-    struct system_frame_result result = player->vtbl->frame(player->mapper_data);
-    return result;
+    if (player->is_valid)
+    {
+        return player->vtbl->frame(player->mapper_data);
+    }
+
+    return (struct system_frame_result){ 0 };
 }
 
 void player_generate_samples(struct player *player, uint16_t *samples, uint32_t count)
 {
-    player->vtbl->generate_samples(player->mapper_data, samples, count);
+    if (player->is_valid)
+    {
+        player->vtbl->generate_samples(player->mapper_data, samples, count);
+    }
 }
 
 void player_reset(struct player *player)
 {
-    printf("player_reset\n");
-    player->vtbl->reset(player->mapper_data);
-    printf("player_reset done\n");
+    if (player->is_valid)
+    {
+        printf("player_reset\n");
+        player->vtbl->reset(player->mapper_data);
+        printf("player_reset done\n");
+    }
 }
 
 void player_set_controller(struct player *player, struct controller_state controller)
 {
-    player->vtbl->set_controller(player->mapper_data, controller);
+    if (player->is_valid)
+    {
+        player->vtbl->set_controller(player->mapper_data, controller);
+    }
 }
 
 void player_free(struct player *player)
 {
-    player->is_valid = false;
-    player->vtbl->free(player->mapper_data);
+    if (player->is_valid)
+    {
+        player->is_valid = false;
+        player->vtbl->free(player->mapper_data);
+    }
 }
 
 bool player_crash(struct player *player)
 {
-    return player->vtbl->crash(player->mapper_data);
+    if (player->is_valid)
+    {
+        return player->vtbl->crash(player->mapper_data);
+    }
+
+    return false;
 }

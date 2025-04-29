@@ -528,6 +528,22 @@ void m228_reset(void *mapper_data);
 bool m228_crash(void *mapper_data);
 void m228_set_controller(void *mapper_data, struct controller_state controller);
 
+// CNROM.H
 
+struct cnrom
+{
+    struct mapper_rom rom;
+    struct system system;
+    uint8_t chr_bank;
+};
+
+extern struct mapper_vtbl cnrom_vtbl;
+void* cnrom_new(struct mapper_data data, struct mux_api apu_mux);
+void cnrom_free(void *mapper_data);
+struct system_frame_result cnrom_frame(void *mapper_data);
+void cnrom_generate_samples(void *mapper_data, uint16_t *samples, uint32_t count);
+void cnrom_reset(void *mapper_data);
+bool cnrom_crash(void *mapper_data);
+void cnrom_set_controller(void *mapper_data, struct controller_state controller);
 
 #endif

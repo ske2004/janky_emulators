@@ -59,7 +59,12 @@ struct mux_api sdl_mux_make()
 
 SDL_HitTestResult hit_test(SDL_Window* win, const SDL_Point* pos, void *userdata)
 {
-    bool hit = pos->y < 12*3 && pos->x > 110*3 && pos->x < 233*3;
+    int w, h;
+    SDL_GetWindowSize(win, &w, &h);
+
+    int ui_scale = w/258;
+
+    bool hit = pos->y < 12*ui_scale && pos->x > 110*ui_scale && pos->x < 233*ui_scale;
 
     return hit ? SDL_HITTEST_DRAGGABLE : SDL_HITTEST_NORMAL;
 }
@@ -120,6 +125,8 @@ enum ui_window
 
 struct neske_ui
 {
+    int scale;
+
     struct player player;
     struct mux_api apu_mux;
     SDL_Renderer *renderer;
@@ -209,7 +216,7 @@ static void set_default_controls(struct controls_spec *controls)
     controls->keys[BTN_RIGHT] = SDLK_RIGHT;
 }
 
-struct neske_ui neske_ui_init(SDL_Renderer *renderer, SDL_Window *window)
+struct neske_ui neske_ui_init(SDL_Renderer *renderer, SDL_Window *window, int ui_scale)
 {
     struct neske_ui ui = { 0 };
 
@@ -229,6 +236,7 @@ struct neske_ui neske_ui_init(SDL_Renderer *renderer, SDL_Window *window)
     ui.emulating = false;
     ui.renderer = renderer;
     ui.window = window;
+    ui.scale = ui_scale;
 
     set_default_controls(&ui.controls);
 
@@ -250,9 +258,9 @@ struct neske_ui neske_ui_init(SDL_Renderer *renderer, SDL_Window *window)
         exit(1);
     }
 
-    SDL_Surface *cursor_surface_2 = SDL_ScaleSurface(cursor_surface, cursor_surface->w*3, cursor_surface->h*3, SDL_SCALEMODE_NEAREST);
+    SDL_Surface *cursor_surface_2 = SDL_ScaleSurface(cursor_surface, cursor_surface->w*ui.scale, cursor_surface->h*ui.scale, SDL_SCALEMODE_NEAREST);
 
-    ui.cursor = SDL_CreateColorCursor(cursor_surface_2, 2*3, 1*3);
+    ui.cursor = SDL_CreateColorCursor(cursor_surface_2, 2*ui.scale, 1*ui.scale);
 
     SDL_SetCursor(ui.cursor);
     
@@ -286,7 +294,7 @@ bool draw_widget(struct neske_ui *ui, const char *name, int x, int y, int w, int
 
     bool intersect = false;
 
-    if (SDL_PointInRect(&(SDL_Point){mx/3, my/3}, &(SDL_Rect){x, y, w, h}))
+    if (SDL_PointInRect(&(SDL_Point){mx/ui->scale, my/ui->scale}, &(SDL_Rect){x, y, w, h}))
     {
         if (name[0] == '#') 
         {
@@ -642,6 +650,17 @@ void audio_callback(void *userdata, SDL_AudioStream *stream, int additional_amou
     SDL_PutAudioStreamData(stream, buf, additional_amount);
 }
 
+int _get_ui_scale()
+{
+    const SDL_DisplayMode *dm = SDL_GetDesktopDisplayMode(1);
+    if (dm == NULL) return 3;
+    int mw = dm->w/1.2, mh = dm->h/1.2;
+    int v = mh/254;
+    if (mw < mh) v = mw/258;
+    if (v < 1) v = 1;
+    return v;
+}
+
 int main(int argc, char* argv[])
 {
     SDL_Window *window;
@@ -649,13 +668,16 @@ int main(int argc, char* argv[])
     bool done = false;
 
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD);
+    
+    int ui_scale = _get_ui_scale();
 
     window = SDL_CreateWindow(
         "neske",
-        258*3,
-        254*3,
+        258*ui_scale,
+        254*ui_scale,
         SDL_WINDOW_OPENGL | SDL_WINDOW_BORDERLESS
     );
+
     SDL_SetWindowHitTest(window, hit_test, NULL);
 
     if (window == NULL)
@@ -682,9 +704,9 @@ int main(int argc, char* argv[])
 
     SDL_AudioDeviceID audio_device = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, NULL);
 
-    SDL_SetRenderScale(renderer, 3, 3);
+    SDL_SetRenderScale(renderer, ui_scale, ui_scale);
 
-    struct neske_ui neske_ui = neske_ui_init(renderer, window);
+    struct neske_ui neske_ui = neske_ui_init(renderer, window, ui_scale);
     SDL_AudioStream *audio_device_stream = SDL_OpenAudioDeviceStream(audio_device, &audio_in, audio_callback, &neske_ui);
     SDL_ResumeAudioStreamDevice(audio_device_stream);
     while (!done) {
