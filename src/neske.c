@@ -489,7 +489,7 @@ void neske_ui_update(struct neske_ui *ui)
         SDL_RenderTexture(ui->renderer, ui->tex_error, NULL, &(SDL_FRect){1, 13, 256, 240});
         if (draw_widget(ui, "List", 56, 196+13, 143, 12))
         {
-            SDL_OpenURL("https://nesdir.github.io/mapper0.html");
+            SDL_OpenURL("https://github.com/ske2004/neske?tab=readme-ov-file#game-support");
         }
     }
     else if (ui->emulating)
