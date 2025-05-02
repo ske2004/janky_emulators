@@ -12,6 +12,7 @@ struct mapper_vtbl cnrom_vtbl = {
     .reset              = cnrom_reset,
     .crash              = cnrom_crash,
     .set_controller     = cnrom_set_controller,
+    .get_system         = cnrom_get_system,
 };
 
 static uint8_t _cnrom_mem_read(void *mapper_data, uint16_t addr)
@@ -99,4 +100,10 @@ void cnrom_set_controller(void *mapper_data, struct controller_state controller)
 {
     struct cnrom *mapper = (struct cnrom *)mapper_data;
     system_update_controller(&mapper->system, controller);
+}
+
+struct system *cnrom_get_system(void *mapper_data)
+{
+    struct cnrom *mapper = (struct cnrom *)mapper_data;
+    return &mapper->system;
 }

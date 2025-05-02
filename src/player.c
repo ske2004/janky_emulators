@@ -138,3 +138,13 @@ bool player_crash(struct player *player)
 
     return false;
 }
+
+struct system *player_get_system(struct player *player)
+{
+    if (player->is_valid)
+    {
+        return player->vtbl->get_system(player->mapper_data);
+    }
+
+    return NULL;
+}

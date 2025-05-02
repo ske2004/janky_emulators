@@ -12,6 +12,7 @@ struct mapper_vtbl unrom_vtbl = {
     .reset              = unrom_reset,
     .crash              = unrom_crash,
     .set_controller     = unrom_set_controller,
+    .get_system         = unrom_get_system,
 };
 
 
@@ -100,4 +101,10 @@ void unrom_set_controller(void *mapper_data, struct controller_state controller)
 {
     struct unrom *mapper = (struct unrom *)mapper_data;
     system_update_controller(&mapper->system, controller);
+}
+
+struct system *unrom_get_system(void *mapper_data)
+{
+    struct unrom *mapper = (struct unrom *)mapper_data;
+    return &mapper->system;
 }

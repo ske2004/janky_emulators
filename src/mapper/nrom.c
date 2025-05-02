@@ -12,6 +12,7 @@ struct mapper_vtbl nrom_vtbl = {
     .reset = nrom_reset,
     .crash = nrom_crash,
     .set_controller = nrom_set_controller,
+    .get_system = nrom_get_system,
 };
 
 uint16_t map_memory_addr(struct nrom *mapper, uint16_t addr)
@@ -109,4 +110,10 @@ void nrom_set_controller(void *mapper_data, struct controller_state controller)
 {
     struct nrom *mapper = (struct nrom *)mapper_data;
     system_update_controller(&mapper->system, controller);
+}
+
+struct system *nrom_get_system(void *mapper_data)
+{
+    struct nrom *mapper = (struct nrom *)mapper_data;
+    return &mapper->system;
 }

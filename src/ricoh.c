@@ -570,12 +570,12 @@ void ricoh_run_instr(
             break;
         case BRK:
             {
-                printf("OPCODE: %02X\n", mem->get(mem->instance, start));
-                printf("REGISTER DUMP: A=%02X X=%02X Y=%02X F=%02X P=%04X\n", (unsigned int)cpu->a, (unsigned int)cpu->x, (unsigned int)cpu->y, (unsigned int)cpu->flags, (unsigned int)cpu->pc);
+                // printf("OPCODE: %02X\n", mem->get(mem->instance, start));
+                // printf("REGISTER DUMP: A=%02X X=%02X Y=%02X F=%02X P=%04X\n", (unsigned int)cpu->a, (unsigned int)cpu->x, (unsigned int)cpu->y, (unsigned int)cpu->flags, (unsigned int)cpu->pc);
                 fflush(stdout);
                 uint16_t pc = read_16(cpu, mem, 0xFFFE);
-                push8(cpu, mem, (pc>>8)&0xFF);
-                push8(cpu, mem, pc&0xFF);
+                push16(cpu, mem, cpu->pc);
+                push8(cpu, mem, cpu->flags | (1 << FLAG_BRK));
                 cpu->pc = pc;
             }
             break;

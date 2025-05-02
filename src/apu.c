@@ -241,7 +241,9 @@ static int16_t read_sample(struct apu *apu)
     // i don't implement DMC (TODO)
     float tri_noise_dmc = 159.79/(1.0/((tri/8227.0)+(noise/12241.0))+100.0);
 
-    float value = do_high_pass_filter(&apu->high_pass, pulse + tri_noise_dmc);
+    float volume = (pulse + tri_noise_dmc)/1.2;
+
+    float value = do_high_pass_filter(&apu->high_pass, volume);
 
     if (value > 1.0) value = 1.0;
     if (value < -1.0) value = -1.0;

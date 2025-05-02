@@ -369,6 +369,7 @@ struct system
     struct mux_api apu_mux;
 
     struct controller_state controller;
+    uint8_t controller_sr;
     uint8_t controller_strobe;
 
     uint8_t memory[1<<16];
@@ -426,6 +427,7 @@ struct mapper_vtbl
     void (*reset)(void *mapper_data);
     bool (*crash)(void *mapper_data);
     void (*set_controller)(void *mapper_data, struct controller_state controller);
+    struct system *(*get_system)(void *mapper_data);
 };
 
 struct player
@@ -442,6 +444,8 @@ void player_set_controller(struct player *player, struct controller_state contro
 struct system_frame_result player_frame(struct player *player);
 void player_generate_samples(struct player *player, uint16_t *samples, uint32_t count);
 bool player_crash(struct player *player);
+struct system *player_get_system(struct player *player);
+
 // NROM.H
 
 struct nrom
@@ -459,6 +463,7 @@ void nrom_generate_samples(void *mapper_data, uint16_t *samples, uint32_t count)
 void nrom_reset(void *mapper_data);
 bool nrom_crash(void *mapper_data);
 void nrom_set_controller(void *mapper_data, struct controller_state controller);
+struct system *nrom_get_system(void *mapper_data);
 
 // MMC1.H
 
@@ -489,6 +494,7 @@ void mmc1_generate_samples(void *mapper_data, uint16_t *samples, uint32_t count)
 void mmc1_reset(void *mapper_data);
 bool mmc1_crash(void *mapper_data);
 void mmc1_set_controller(void *mapper_data, struct controller_state controller);
+struct system *mmc1_get_system(void *mapper_data);
 
 // UNROM.H
 
@@ -507,6 +513,7 @@ void unrom_generate_samples(void *mapper_data, uint16_t *samples, uint32_t count
 void unrom_reset(void *mapper_data);
 bool unrom_crash(void *mapper_data);
 void unrom_set_controller(void *mapper_data, struct controller_state controller);
+struct system *unrom_get_system(void *mapper_data);
 
 // M228.H -- MAKE YOUR SELECTION, NOW!
 
@@ -527,6 +534,7 @@ void m228_generate_samples(void *mapper_data, uint16_t *samples, uint32_t count)
 void m228_reset(void *mapper_data);
 bool m228_crash(void *mapper_data);
 void m228_set_controller(void *mapper_data, struct controller_state controller);
+struct system *m228_get_system(void *mapper_data);
 
 // CNROM.H
 
@@ -545,5 +553,5 @@ void cnrom_generate_samples(void *mapper_data, uint16_t *samples, uint32_t count
 void cnrom_reset(void *mapper_data);
 bool cnrom_crash(void *mapper_data);
 void cnrom_set_controller(void *mapper_data, struct controller_state controller);
-
+struct system *cnrom_get_system(void *mapper_data);
 #endif

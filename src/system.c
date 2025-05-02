@@ -60,9 +60,10 @@ void system_mem_write(struct system *system, uint16_t addr, uint8_t data)
             system->cpu.cycles += system->cpu.cycles&2 + 513;
             break;
         case 0x4016:
-            if (data&1)
+            system->controller_strobe = data&1;
+            if (system->controller_strobe)
             {
-                system->controller_strobe = 0;
+                system->controller_sr = 0;
             }
             break;
         default:
@@ -107,9 +108,14 @@ uint8_t system_mem_read(struct system *system, uint16_t addr)
         case 0x4017:
             return 0; // controller 2, not apu, confusing ya
         case 0x4016:
-            if (system->controller_strobe != 8)
+            if (system->controller_strobe)
             {
-                return system->controller.btns[system->controller_strobe++];
+                system->controller_sr = 0;
+            }
+            if (system->controller_sr != 8)
+            {
+                // TODO: games like paperboy require 0x40 to be set, i'm lazy to figure out why right now
+                return system->controller.btns[system->controller_sr++] | 0x40;
             }
             else
             {

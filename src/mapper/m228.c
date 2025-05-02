@@ -12,6 +12,7 @@ struct mapper_vtbl m228_vtbl = {
     .reset              = m228_reset,
     .crash              = m228_crash,
     .set_controller     = m228_set_controller,
+    .get_system         = m228_get_system,
 };
 
 struct parsed_data
@@ -71,12 +72,6 @@ static void _update_chr_and_mirroring(struct m228 *mapper)
 {
     struct parsed_data data = _parse_data(mapper);
 
-    printf("PRG ADDR 1: %zx\n", data.prg_addr_1);
-    printf("PRG ADDR 2: %zx\n", data.prg_addr_2);
-    printf("CHR BANK: %zx\n", data.chr_bank);
-    printf("CHR_SIZE: %zx\n", mapper->rom.chr_size);
-    printf("PRG_SIZE: %zx\n", mapper->rom.prg_size);
-
     memcpy(mapper->system.ppu.pins.chr, mapper->rom.chr+data.chr_bank*0x2000, 0x2000);
     mapper->system.ppu.pins.mirroring_mode = data.mirroring;
 }
@@ -88,8 +83,6 @@ static void _m228_mem_write(void *mapper_data, uint16_t addr, uint8_t val)
     {
         mapper->reg_data = val;
         mapper->reg_addr = addr;
-        printf("REG ADDR: %x\n", mapper->reg_addr);
-        printf("REG DATA: %x\n", mapper->reg_data);
         _update_chr_and_mirroring(mapper);
     }
     else
@@ -106,9 +99,6 @@ void* m228_new(struct mapper_data data, struct mux_api apu_mux)
     printf("MAKE YOUR SELECTION, NOW!\n");
 
     mapper->rom = mapper_rom_copy(&data);
-
-    printf("PRGS: %zx\n", mapper->rom.prg_size);
-    printf("CHRS: %zx\n", mapper->rom.chr_size);
 
     mapper->system = system_init(apu_mux, (struct ricoh_mem_interface){
         .instance = mapper,
@@ -157,4 +147,10 @@ void m228_set_controller(void *mapper_data, struct controller_state controller)
 {
     struct m228 *mapper = (struct m228 *)mapper_data;
     system_update_controller(&mapper->system, controller);
+}
+
+struct system *m228_get_system(void *mapper_data)
+{
+    struct m228 *mapper = (struct m228 *)mapper_data;
+    return &mapper->system;
 }

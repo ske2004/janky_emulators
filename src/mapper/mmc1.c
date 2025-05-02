@@ -38,6 +38,7 @@ struct mapper_vtbl mmc1_vtbl = {
     .reset              = mmc1_reset,
     .crash              = mmc1_crash,
     .set_controller     = mmc1_set_controller,
+    .get_system         = mmc1_get_system,
 };
 
 enum ppu_mir _mmc1_get_mirroring(struct mmc1 *mapper)
@@ -84,7 +85,7 @@ static uint8_t _mmc1_mem_read(void *mapper_data, uint16_t addr)
     {
         return mapper->rom.prg[addr - 0x8000 + prg_bank_1*0x4000];
     }
-    else if (addr >= 0xC000 && addr < 0xFFFF)
+    else if (addr >= 0xC000 && addr <= 0xFFFF)
     {
         return mapper->rom.prg[addr - 0xC000 + prg_bank_2*0x4000];
     }
@@ -191,4 +192,10 @@ void mmc1_set_controller(void *mapper_data, struct controller_state controller)
 {
     struct mmc1 *mapper = (struct mmc1 *)mapper_data;
     system_update_controller(&mapper->system, controller);
+}
+
+struct system *mmc1_get_system(void *mapper_data)
+{
+    struct mmc1 *mapper = (struct mmc1 *)mapper_data;
+    return &mapper->system;
 }

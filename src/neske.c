@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <time.h>
 #include "SDL3/SDL_audio.h"
 #include "SDL3/SDL_dialog.h"
 #include "SDL3/SDL_error.h"
@@ -17,6 +18,7 @@
 #include "SDL3/SDL_surface.h"
 #include <SDL3/SDL.h>
 #include "SDL3/SDL_video.h"
+#include "SDL3/SDL_main.h"
 #include "neske.h"
 
 uint32_t pallete[] = {
@@ -123,15 +125,22 @@ enum ui_window
     WIN_FUN,
 };
 
+struct rtc_state
+{
+    int level;
+    int frames_since_last_pulse;
+};  
+
 struct neske_ui
 {
     int scale;
-
     struct player player;
     struct mux_api apu_mux;
     SDL_Renderer *renderer;
     SDL_Window *window;
     SDL_Mutex *mutex;
+
+    struct rtc_state rtc_state;
 
     bool emulating;
     bool error;
@@ -154,6 +163,7 @@ struct neske_ui
     SDL_Texture *tex_ctx_file;
     SDL_Texture *tex_config;
     SDL_Texture *tex_about;
+    SDL_Texture *tex_fun;
     SDL_Texture *tex_userfont;
 };
 
@@ -216,6 +226,37 @@ static void set_default_controls(struct controls_spec *controls)
     controls->keys[BTN_RIGHT] = SDLK_RIGHT;
 }
 
+void rtc_iter(struct rtc_state *rtc, struct system *sys)
+{
+    if (rtc->level == 0) return;
+    rtc->frames_since_last_pulse++;
+    int frames = 20;
+    if (rtc->level == 1) frames = 10;
+    if (rtc->frames_since_last_pulse < frames) return;
+    rtc->frames_since_last_pulse = 0;
+
+    uint16_t addr = rand()%0x2000;
+    while (addr >= 0x100 && addr < 0x200)
+    {
+        addr = rand()%0x2000;
+    }
+
+    uint8_t val = sys->memory[addr];
+    if (rtc->level == 2)
+    {
+        val = rand()%0x100;
+    }
+    else
+    {
+        int delta = rand()%2 ? 1 : -1;
+        if (val == 0) delta = 1;
+        if (val == 0xFF) delta = -1;
+        val += delta;
+    }
+
+    sys->memory[addr] = val;
+}
+
 struct neske_ui neske_ui_init(SDL_Renderer *renderer, SDL_Window *window, int ui_scale)
 {
     struct neske_ui ui = { 0 };
@@ -247,6 +288,7 @@ struct neske_ui neske_ui_init(SDL_Renderer *renderer, SDL_Window *window, int ui
     ui.tex_ctx_file = load_ui_texture(renderer, "img/ctx_file.png");
     ui.tex_config = load_ui_texture(renderer, "img/config.png");
     ui.tex_about = load_ui_texture(renderer, "img/about.png");
+    ui.tex_fun = load_ui_texture(renderer, "img/fun.png");
     ui.tex_userfont = load_ui_texture(renderer, "img/userfont.png");
     ui.tex_backbuffer = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, 256, 240);
     SDL_SetTextureScaleMode(ui.tex_backbuffer, SDL_SCALEMODE_NEAREST);
@@ -323,7 +365,6 @@ bool neske_ui_event(struct neske_ui *ui, SDL_Event *event)
             break;
         case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
         case SDL_EVENT_GAMEPAD_BUTTON_UP:
-            printf("Gamepad button: %d\n", event->gbutton.button);
             if (ui->show_window == WIN_NONE)
             {
                 switch (event->gbutton.button)
@@ -432,6 +473,12 @@ static void SDLCALL on_rom_open(void *userdata, const char *const *filelist, int
 void neske_ui_update(struct neske_ui *ui)
 {
     SDL_LockMutex(ui->mutex);
+
+    if (ui->player.is_valid)
+    {
+        struct system *sys = player_get_system(&ui->player);
+        rtc_iter(&ui->rtc_state, sys);
+    }
 
     if (ui->crash)
     {
@@ -563,6 +610,47 @@ void neske_ui_update(struct neske_ui *ui)
             {
                 SDL_OpenURL("https://ske.land");
             }
+            break;
+        case WIN_FUN:
+            SDL_RenderTexture(ui->renderer, ui->tex_fun, NULL, NULL);
+            if (draw_widget(ui, "FUN_X", 165, 95, 11, 11))
+            {
+                ui->show_window = WIN_NONE;
+            }
+
+            if (draw_widget(ui, "FUN_OK", 160, 110, 13, 44))
+            {
+                ui->show_window = WIN_NONE;
+            }
+
+            {
+                SDL_FRect fun_btn_off = {84, 125, 24, 28};
+                SDL_FRect fun_btn_low = {108, 125, 24, 28};
+                SDL_FRect fun_btn_hi = {132, 125, 23, 28};
+
+                if (draw_widget(ui, "FUN_BTN_OFF", fun_btn_off.x, fun_btn_off.y, fun_btn_off.w, fun_btn_off.h))
+                {
+                    ui->rtc_state.level = 0;
+                }
+
+                if (draw_widget(ui, "FUN_BTN_LOW", fun_btn_low.x, fun_btn_low.y, fun_btn_low.w, fun_btn_low.h))
+                {
+                    ui->rtc_state.level = 1;
+                }
+
+                if (draw_widget(ui, "FUN_BTN_HI", fun_btn_hi.x, fun_btn_hi.y, fun_btn_hi.w, fun_btn_hi.h))
+                {
+                    ui->rtc_state.level = 2;
+                }
+
+                SDL_SetRenderDrawColor(ui->renderer, 0xFF, 0xFF, 0x0, 0xFF); 
+                switch (ui->rtc_state.level)
+                {
+                    case 0: SDL_RenderRect(ui->renderer, &fun_btn_off); break;
+                    case 1: SDL_RenderRect(ui->renderer, &fun_btn_low); break;
+                    case 2: SDL_RenderRect(ui->renderer, &fun_btn_hi); break;
+                }
+            }
         }
     }
 
@@ -663,6 +751,8 @@ int _get_ui_scale()
 
 int main(int argc, char* argv[])
 {
+    srand(time(NULL));
+
     SDL_Window *window;
     SDL_Renderer *renderer;
     bool done = false;
