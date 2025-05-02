@@ -351,7 +351,7 @@ uint8_t ppu_get_pixel(struct ppu *ppu, int x, int y)
                     ppu->regs[PPUIO_STATUS] = ppu->regs[PPUIO_STATUS]|(1<<6);
                 }
                 
-                if (!(obj.attr & (1<<5) && opaque))
+                if (!(obj.attr & (1<<5)) || !opaque)
                 {
                     pixel = palcolor;
                     break;
@@ -394,7 +394,7 @@ uint8_t ppu_get_pixel(struct ppu *ppu, int x, int y)
                     ppu->regs[PPUIO_STATUS] = ppu->regs[PPUIO_STATUS]|(1<<6);
                 }
                 
-                if (!(obj.attr & (1<<5) && opaque))
+                if (!(obj.attr & (1<<5)) || !opaque)
                 {
                     pixel = palcolor;
                     break;

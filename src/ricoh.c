@@ -26,7 +26,7 @@ const char *ricoh_instr_to_str[] =
     "PHA", "PHP", "PLA", "PLP",
     "ROL", "ROR", "RTI", "RTS",
     "SBC", "SEC", "SED", "SEI", "STA", "STX", "STY",
-    "TAX", "TAY", "TSX", "TXA", "TXS", "TYA", 
+    "TAX", "TAY", "TSX", "TXA", "TXS", "TYA", "???"
 };
 
 // 0xFF - Invalid addressing mode
@@ -194,6 +194,14 @@ struct instr_decoded ricoh_decode_instr(struct ricoh_decoder *decoder, struct ri
     decoded.id = decoder->itbl[opc];
     decoded.addr_mode = decoder->atbl[opc];
 
+    if (decoded.id == _ICOUNT)
+    {
+        decoded.id = _ICOUNT;
+        decoded.addr_mode = AM_IMP;
+        decoded.size = 1;
+        return decoded;
+    }
+
     size_t operand_size = 0;
 
     switch (decoded.addr_mode)
@@ -203,7 +211,7 @@ struct instr_decoded ricoh_decode_instr(struct ricoh_decoder *decoder, struct ri
         case AM_ABX: operand_size = 2; break;
         case AM_ABY: operand_size = 2; break;
         case AM_IMM: operand_size = 1; break;
-        case AM_IMP: break;
+        case AM_IMP: if (decoded.id == BRK) operand_size = 1; break;
         case AM_IND: operand_size = 2; break;
         case AM_XND: operand_size = 1; break;
         case AM_INY: operand_size = 1; break;
@@ -510,9 +518,13 @@ void ricoh_run_instr(
 )
 {
     uint8_t rmw_temp = 0;
+    size_t start = cpu->pc;
 
     cpu->pc += instr.size;
-    cpu->cycles += ricoh_cycle_tbl[instr.addr_mode+instr.id*13];
+    if (instr.id != _ICOUNT)
+    {
+        cpu->cycles += ricoh_cycle_tbl[instr.addr_mode+instr.id*ADDR_MODE_COUNT];
+    }
 
     struct ricoh_address addr = make_address(cpu, instr, mem);
 
@@ -557,10 +569,15 @@ void ricoh_run_instr(
             do_reljump(cpu, instr, getflag(cpu, FLAG_NEG) == false);
             break;
         case BRK:
-            printf("REGISTER DUMP: A=%02X X=%02X Y=%02X F=%02X P=%04X\n", (unsigned int)cpu->a, (unsigned int)cpu->x, (unsigned int)cpu->y, (unsigned int)cpu->flags, (unsigned int)cpu->pc);
-            printf("RESULTS: %2X %2X\n", read_8(cpu, mem, 2), read_8(cpu, mem, 3));
-            fflush(stdout);
-            cpu->crash = 1;
+            {
+                printf("OPCODE: %02X\n", mem->get(mem->instance, start));
+                printf("REGISTER DUMP: A=%02X X=%02X Y=%02X F=%02X P=%04X\n", (unsigned int)cpu->a, (unsigned int)cpu->x, (unsigned int)cpu->y, (unsigned int)cpu->flags, (unsigned int)cpu->pc);
+                fflush(stdout);
+                uint16_t pc = read_16(cpu, mem, 0xFFFE);
+                push8(cpu, mem, (pc>>8)&0xFF);
+                push8(cpu, mem, pc&0xFF);
+                cpu->pc = pc;
+            }
             break;
         case BVC:
             do_reljump(cpu, instr, getflag(cpu, FLAG_OFW) == false);
@@ -667,7 +684,6 @@ void ricoh_run_instr(
             break;
         case RTI:
             cpu->flags = (cpu->flags & ((1 << FLAG_BRK) | (1 << FLAG_BI5))) | (pull8(cpu, mem) & (((1 << FLAG_BRK) | (1 << FLAG_BI5)) ^ 0xFF));
-
             cpu->pc = pull16(cpu, mem);
             break;
         case RTS:
@@ -714,7 +730,8 @@ void ricoh_run_instr(
             cpu->a = cpu->y;
             break;
         case _ICOUNT:
-            assert(false && "not an instruction");
+            printf("OPCODE: %02X\n", mem->get(mem->instance, start));
+            cpu->crash = 1;
             break;
     }
 }
