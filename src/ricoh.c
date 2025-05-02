@@ -194,7 +194,7 @@ struct instr_decoded ricoh_decode_instr(struct ricoh_decoder *decoder, struct ri
     decoded.id = decoder->itbl[opc];
     decoded.addr_mode = decoder->atbl[opc];
 
-    if (decoded.id == _ICOUNT)
+    if (decoded.id == 0xFF)
     {
         decoded.id = _ICOUNT;
         decoded.addr_mode = AM_IMP;

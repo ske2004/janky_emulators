@@ -19,7 +19,7 @@ static uint8_t _cnrom_mem_read(void *mapper_data, uint16_t addr)
 {
     struct cnrom *mapper = (struct cnrom *)mapper_data;
 
-    if (addr >= 0x8000 && addr < 0xFFFF)
+    if (addr >= 0x8000 && addr <= 0xFFFF)
     {
         return mapper->rom.prg[addr - 0x8000];
     }

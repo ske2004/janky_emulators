@@ -113,6 +113,7 @@ enum ppu_io
 enum ppu_mir
 {
     PPUMIR_ONE,
+    PPUMIR_ONE_ALT,
     PPUMIR_VER,
     PPUMIR_HOR,
 };
@@ -147,6 +148,10 @@ struct ppu
     uint8_t x;
     uint8_t w;
     uint32_t v;
+
+    // PPU rendering goes on for 3 more cycles before being disabled, according to nesdev wiki
+    uint8_t toggle_countdown;
+    uint8_t toggle_value;
 
     // Rendering & Timing
     uint8_t screen[256*240];
@@ -554,4 +559,25 @@ void cnrom_reset(void *mapper_data);
 bool cnrom_crash(void *mapper_data);
 void cnrom_set_controller(void *mapper_data, struct controller_state controller);
 struct system *cnrom_get_system(void *mapper_data);
+
+// AXROM.H
+
+struct axrom
+{
+    struct mapper_rom rom;
+    struct system system;
+    uint8_t prg_bank;
+};
+
+extern struct mapper_vtbl axrom_vtbl;
+void* axrom_new(struct mapper_data data, struct mux_api apu_mux);
+void axrom_free(void *mapper_data);
+struct system_frame_result axrom_frame(void *mapper_data);
+void axrom_generate_samples(void *mapper_data, uint16_t *samples, uint32_t count);
+void axrom_reset(void *mapper_data);
+bool axrom_crash(void *mapper_data);
+void axrom_set_controller(void *mapper_data, struct controller_state controller);
+struct system *axrom_get_system(void *mapper_data);
+
+
 #endif

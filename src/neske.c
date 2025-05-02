@@ -651,6 +651,9 @@ void neske_ui_update(struct neske_ui *ui)
                     case 2: SDL_RenderRect(ui->renderer, &fun_btn_hi); break;
                 }
             }
+            break;
+        case WIN_NONE:
+            break;
         }
     }
 

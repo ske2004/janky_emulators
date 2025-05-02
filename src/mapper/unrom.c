@@ -27,7 +27,7 @@ static uint8_t _unrom_mem_read(void *mapper_data, uint16_t addr)
     {
         return mapper->rom.prg[addr - 0x8000 + prg_bank_1*0x4000];
     }
-    else if (addr >= 0xC000 && addr < 0xFFFF)
+    else if (addr >= 0xC000 && addr <= 0xFFFF)
     {
         return mapper->rom.prg[addr - 0xC000 + prg_bank_2*0x4000];
     }

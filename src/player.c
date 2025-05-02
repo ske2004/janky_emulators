@@ -65,8 +65,9 @@ struct player player_init(uint8_t *ines, struct mux_api apu_mux)
         case 0: player.vtbl = &nrom_vtbl; break;
         case 1: player.vtbl = &mmc1_vtbl; break;
         case 2: player.vtbl = &unrom_vtbl; break;
-        case 228: player.vtbl = &m228_vtbl; break;
         case 3: player.vtbl = &cnrom_vtbl; break;
+        case 7: player.vtbl = &axrom_vtbl; break;
+        case 228: player.vtbl = &m228_vtbl; break;
         default: return player;
     }
 

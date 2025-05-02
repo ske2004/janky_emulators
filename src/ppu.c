@@ -33,6 +33,9 @@ uint8_t *ppu_vram_get_ptr(struct ppu *ppu, uint16_t addr)
                     addr -= 0x800;
                 }
                 break;
+            case PPUMIR_ONE_ALT:
+                addr = addr % 0x400 + 0x2400;
+                break;
             case PPUMIR_ONE:
                 addr = addr % 0x400 + 0x2000;
                 break;
@@ -272,8 +275,12 @@ uint8_t ppu_get_pixel(struct ppu *ppu, int x, int y)
     uint8_t pixel = 15;
     bool opaque = false;
 
+    bool leftrgn = x < 8;
+    bool bgvisible = (ppu->regs[PPUIR_MASK]&(1<<3)) && (!leftrgn || (ppu->regs[PPUIR_MASK]&(1<<1)));
+    bool objvisible = (ppu->regs[PPUIR_MASK]&(1<<4)) && (!leftrgn || (ppu->regs[PPUIR_MASK]&(1<<2)));
+
     // Get tile pixel
-    if (ppu->regs[PPUIR_MASK]&(1<<3))
+    if (bgvisible)
     {
         uint16_t scroll_x = 0, scroll_y = 0;
         ppu_get_scroll(ppu, &scroll_x, &scroll_y);
@@ -307,7 +314,7 @@ uint8_t ppu_get_pixel(struct ppu *ppu, int x, int y)
         pixel = palcolor;
     }
 
-    if (ppu->regs[PPUIR_MASK]&(1<<4))
+    if (objvisible)
     {
         if (ppu->regs[PPUIR_CTRL]&(1<<5))
             for (int o = 0; o < ppu->preload_objects_count; o++)

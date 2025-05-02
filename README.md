@@ -20,9 +20,11 @@ Look at the links, it has the supported games. (Not all games are supported, che
 | 1      | Seems to work                        | https://nesdir.github.io/mapper1.html        |
 | 2      | Seems to work                        | https://nesdir.github.io/mapper2.html        |
 | 3      | Seems to work                        | https://nesdir.github.io/mapper3.html        |
+| 7      | Battletoads crashes**                | https://nesdir.github.io/mapper7.html        |
 | 228    | Cheetahmen 2 crashes the emulator :? | https://nesdir.github.io/mapper228.html      |
 
 *It'd be emulator bug not mapper bug, Slalom works but it looks terrible.
+**Bad PPU implementation
 
 # Limitations
 
