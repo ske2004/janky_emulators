@@ -26,6 +26,15 @@ Look at the links, it has the supported games. (Not all games are supported, che
 *It'd be emulator bug not mapper bug, Slalom works but it looks terrible.
 **Bad PPU implementation
 
+## Beatable games
+
+Right now it's just games I beat myself:
+
+| Name       | Info                                 |
+|-----------:|--------------------------------------|
+| Rockman II | Works just fine                      |
+| DuckTales  | Vertical scrolling is broken         |
+
 # Limitations
 
 - No APU PCM
