@@ -224,8 +224,13 @@ struct ppu_nametable_result ppu_read_nametable(struct ppu *ppu, uint8_t x, uint8
     {
         x %= 32;
     }
+    else if (ppu->pins.mirroring_mode == PPUMIR_VER)
+    {
+        y %= 30;
+    }
     else
     {
+        x %= 32;
         y %= 30;
     }
 

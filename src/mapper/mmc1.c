@@ -46,7 +46,7 @@ enum ppu_mir _mmc1_get_mirroring(struct mmc1 *mapper)
     switch (mapper->reg_ctrl & 0x3)
     {
         case 0: return PPUMIR_ONE;
-        case 1: return PPUMIR_ONE;
+        case 1: return PPUMIR_ONE_ALT;
         case 2: return PPUMIR_VER;
         case 3: return PPUMIR_HOR;
     }
