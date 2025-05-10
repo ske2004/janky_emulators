@@ -1,0 +1,19 @@
+Resources ----------------------------------------------------------------------
+
+PCEtech by Charles MacDonald
+
+CPU manual
+https://dn790004.ca.archive.org/0/items/PCEDev/HuC6280%20-%20CMOS%208-bit%20Microprocessor%20Software%20Manual.pdf
+
+(Yes, that's where I found how the MMU works xD)
+https://computer.fandom.com/wiki/Hudson_Soft_HuC6280
+
+HuC6280 opcode table
+https://www.chrismcovell.com/PCEdev/HuC6280_opcodes.html
+
+Notes --------------------------------------------------------------------------
+
+The address bus is 21 bits, but only 64k (0xFFFF) is available at same time.
+The memory space is divided into 8k (0x2000) chunks, total of 8 chunks.
+So, the CPU has a MMU, that you can interact with using TAM[i]/TMA[i].
+There's 8 registers for each chunk, MPR[i]. TAM[i] transfers A into MPR[i], TMA[i] transfers MPR[i] into A.
