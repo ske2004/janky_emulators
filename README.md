@@ -30,10 +30,11 @@ Look at the links, it has the supported games. (Not all games are supported, che
 
 Right now it's just games I beat myself:
 
-| Name       | Info                                 |
-|-----------:|--------------------------------------|
-| Rockman II | Works just fine                      |
-| DuckTales  | Vertical scrolling is broken         |
+| Name              | Info                                 |
+|------------------:|--------------------------------------|
+| Rockman II        | Works just fine                      |
+| DuckTales         | Vertical scrolling is broken         |
+| Super Mario Bros. | Works just fine                      |
 
 # Limitations
 
