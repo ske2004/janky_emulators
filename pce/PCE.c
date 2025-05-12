@@ -36,11 +36,13 @@ pce_emulator *PCE_Create(uint8_t *ROM, uint32_t Size)
 
 void PCE_Run(pce_emulator *Emulator)
 {
-    HuC6280_PowerUp(&Emulator->CPU);
-    while (Emulator->CPU.IsCrashed == false)
-    {
-        HuC6280_Next_Instr(&Emulator->CPU, &Emulator->Decoder, &Emulator->Bus);
-    }
+    HuC6280_Dump_Known_Ops(&Emulator->Decoder);
+
+    // HuC6280_PowerUp(&Emulator->CPU);
+    // while (Emulator->CPU.IsCrashed == false)
+    // {
+    //     HuC6280_Next_Instr(&Emulator->CPU, &Emulator->Decoder, &Emulator->Bus);
+    // }
 }
 
 void PCE_Destroy(pce_emulator *Emulator)

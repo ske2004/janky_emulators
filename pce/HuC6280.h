@@ -1,3 +1,6 @@
+#ifndef HUC6280_H
+#define HUC6280_H
+
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -27,7 +30,8 @@ typedef enum
     SBC, SEC, SED, SEI,
     SMB0, SMB1, SMB2, SMB3, SMB4, SMB5, SMB6, SMB7,
     STA, STP, STX, STY, STZ,
-    TAM, TAX, TAY, TMA, TRB, TSB, TSX, TXA, TXS, TYA, 
+    TAI, TAM, TAX, TAY, TDD, TIA, TII, TIN,
+    TMA, TRB, TSB, TSX, TXA, TXS, TYA, 
     WAI
 } huc6280_instr;
 
@@ -69,11 +73,24 @@ typedef struct
     uint8_t Cycles;
 } huc6280_instr_decoded;
 
+typedef uint32_t micro_op;
+
+typedef struct {
+    micro_op Ops[32];
+    uint32_t Count;
+    uint32_t Index;
+
+    uint16_t Src;
+    uint16_t Dst;
+    uint16_t Tmp;
+} huc6280_micro_ops;
+
 typedef struct
 {
-    uint8_t ITBL[256]; // Addressing mode table
-    uint8_t ATBL[256]; // Instruction table
-    uint8_t CTBL[256]; // Cycle table
+    uint8_t ITBL[256];               // Addressing mode table
+    uint8_t ATBL[256];               // Instruction table
+    uint8_t CTBL[256];               // Cycle table
+    huc6280_micro_ops MicroOps[256]; // Micro op table
 } huc6280_decoder;
 
 typedef struct
@@ -86,6 +103,8 @@ typedef struct
 
     bool IsCrashed;
     bool IsFast; // if not set, multiply Cycles by 4
+
+    huc6280_micro_ops MicroOps;
 } huc6280_state;
 
 typedef struct
@@ -98,6 +117,8 @@ typedef struct
 huc6280_decoder HuC6280_MakeDecoder();
 huc6280_instr_decoded HuC6280_Decode_Instr(huc6280_decoder *decoder, huc6280_state *cpu, huc6280_bus *mem, uint16_t addr);
 void HuC6280_Format_Decoded_Instr(char *dest, huc6280_instr_decoded decoded);
+
 void HuC6280_PowerUp(huc6280_state *Cpu);
-void HuC6280_Run_Instr(huc6280_state *Cpu, huc6280_instr_decoded Instr, huc6280_bus *Mem);
-void HuC6280_Next_Instr(huc6280_state *Cpu, huc6280_decoder *Decoder, huc6280_bus *Mem);
+void HuC6280_Run_Cycle(huc6280_state *Cpu, huc6280_decoder *Decoder, huc6280_bus *Mem);
+
+#endif // HUC6280_H
