@@ -76,13 +76,15 @@ typedef struct
 typedef uint32_t micro_op;
 
 typedef struct {
-    micro_op Ops[32];
+    micro_op Ops[64];
     uint32_t Count;
     uint32_t Index;
 
     uint16_t Src;
     uint16_t Dst;
+    uint16_t Len;
     uint16_t Tmp;
+    uint16_t Tmp2;
 } huc6280_micro_ops;
 
 typedef struct
@@ -100,6 +102,7 @@ typedef struct
     uint8_t MPR[8]; // Bank select for each 2k bank
 
     uint64_t Cycles;
+    int32_t Timer;
 
     bool IsCrashed;
     bool IsFast; // if not set, multiply Cycles by 4
@@ -119,6 +122,6 @@ huc6280_instr_decoded HuC6280_Decode_Instr(huc6280_decoder *decoder, huc6280_sta
 void HuC6280_Format_Decoded_Instr(char *dest, huc6280_instr_decoded decoded);
 
 void HuC6280_PowerUp(huc6280_state *Cpu);
-void HuC6280_Run_Cycle(huc6280_state *Cpu, huc6280_decoder *Decoder, huc6280_bus *Mem);
+void HuC6280_Next_Cycle(huc6280_state *Cpu, huc6280_decoder *Decoder, huc6280_bus *Mem);
 
 #endif // HUC6280_H

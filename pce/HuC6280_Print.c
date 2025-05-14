@@ -74,45 +74,53 @@ const size_t HUC6280_FLAG_TO_STR_LEN = sizeof(HUC6280_FLAG_TO_STR)/sizeof(HUC628
 
 const char *HUC6280_MICRO_OP_REG_TO_STR[] =
 {
-    "PT1", "PT2", "LEN", "TMP"
+    "PT1", "PT2", "LEN", "TM1", "TM2"
 };
 
 const size_t HUC6280_MICRO_OP_REG_TO_STR_LEN = sizeof(HUC6280_MICRO_OP_REG_TO_STR)/sizeof(HUC6280_MICRO_OP_REG_TO_STR[0]);
 
 const char *HUC6280_MICRO_OP_TYPE_TO_STR[] =
 {
-    "NOP",
-    "READ_NEXT",
-    "READ_NEXT_LO",
-    "READ_NEXT_HI",
-    "READ_NEXT_DMY",
-    "SET_FLAG",
-    "CLEAR_FLAG",
-    "GET_CPU_REG",
-    "SET_CPU_REG",
-    "READ_MEM",
-    "WRITE_MEM",
+    "NOP",           
+    "READ_NEXT",     
+    "READ_NEXT_LO",  
+    "READ_NEXT_HI",  
+    "READ_NEXT_DMY", 
+    "SET_FLAG",      
+    "CLEAR_FLAG",    
+    "ARITH_FLAGS",   
+    "GET_CPU_REG",   
+    "SET_CPU_REG",   
+
+    "DEREF",
+    "READ_MEM", 
+    "WRITE_MEM", 
+
+    "GOTO_LZ",       
+    "GOTO_LNZ",
+
+    "INDEX_X_ZPG",
+    "INDEX_X",
+    "INDEX_Y",
+
+    "REG_INC",
+    "REG_DEC",
+
+    "OP_OR",
+    "OP_AND",
+    "OP_XOR",
+    "OP_ADD",
+    "OP_SUB",
+
+    "STACK_READ",
+    "STACK_WRITE",
+    "STACK_INC",
+    "STACK_DEC",
+
+    // Ad hoc
     "EXEC_TAM",
     "EXEC_STZ",
-    "EXEC_CSH"
-};
-
-const size_t HUC6280_MICRO_OP_CYCLES[] =
-{
-    [MO_NOP] = 1,
-    [MO_READ_NEXT] = 1,
-    [MO_READ_NEXT_LO] = 1,
-    [MO_READ_NEXT_HI] = 1,
-    [MO_READ_NEXT_DMY] = 1,
-    [MO_SET_FLAG] = 0,
-    [MO_CLEAR_FLAG] = 0,
-    [MO_GET_CPU_REG] = 0,
-    [MO_SET_CPU_REG] = 0,
-    [MO_READ_MEM] = 1,
-    [MO_WRITE_MEM] = 1,
-    [MO_EXEC_TAM] = 0,
-    [MO_EXEC_STZ] = 1,
-    [MO_EXEC_CSH] = 1,
+    "EXEC_CSH",
 };
 
 const size_t HUC6280_MICRO_OP_TYPE_TO_STR_LEN = sizeof(HUC6280_MICRO_OP_TYPE_TO_STR)/sizeof(HUC6280_MICRO_OP_TYPE_TO_STR[0]);
@@ -124,7 +132,7 @@ void HuC6280_Print_Micro_Op(micro_op Op)
 
     assert(Type < HUC6280_MICRO_OP_TYPE_TO_STR_LEN);
 
-    printf("\x1b[31m%s ", HUC6280_MICRO_OP_TYPE_TO_STR[Type]);
+    printf("%20s ", HUC6280_MICRO_OP_TYPE_TO_STR[Type]);
 
     switch (Type)
     {
@@ -133,23 +141,29 @@ void HuC6280_Print_Micro_Op(micro_op Op)
         case MO_READ_NEXT_LO: 
         case MO_READ_NEXT_HI: 
         case MO_READ_MEM: 
-        case MO_WRITE_MEM: 
-            printf("(%s)", HUC6280_MICRO_OP_REG_TO_STR[Operand]);
+        case MO_WRITE_MEM:
+        case MO_DEREF:
+        case MO_INDEX_X_ZPG:
+        case MO_INDEX_X:
+        case MO_INDEX_Y:
+            printf("(%-7s) ", HUC6280_MICRO_OP_REG_TO_STR[Operand]);
             break;
 
         // Flag printer
         case MO_SET_FLAG: 
         case MO_CLEAR_FLAG: 
-            printf("%s", HUC6280_FLAG_TO_STR[Operand]);
+            printf("%-10s", HUC6280_FLAG_TO_STR[Operand]);
             break;
 
         // CPU reg printer
         case MO_GET_CPU_REG: 
         case MO_SET_CPU_REG:
-            printf("%s", HUC6280_REG_TO_STR[Operand]);
+            printf("%-10s", HUC6280_REG_TO_STR[Operand]);
             break;
 
-        default: break;
+        default: 
+            printf("%-9c ", ' ');
+            break;
     }
 }
 
@@ -160,7 +174,7 @@ void HuC6280_Print_Micro_Ops(huc6280_micro_ops *MicroOps)
     for (size_t i = 0; i < MicroOps->Count; i++)
     {
         Cycles += HUC6280_MICRO_OP_CYCLES[MicroOps->Ops[i] & 0xFF];
-        printf("    \x1b[33m% 2d ", Cycles);
+        printf("    \x1b[33m% 3d \x1b[31m", Cycles);
         HuC6280_Print_Micro_Op(MicroOps->Ops[i]);
         printf("\x1b[0m\n");
     }
