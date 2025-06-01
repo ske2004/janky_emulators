@@ -41,7 +41,8 @@ typedef enum
     MO_SET_CPU_REG,   // Operand -> CPU REG
 
     // Memory
-    MO_DEREF,         
+    MO_DEREF_LO,         
+    MO_DEREF_HI,
     MO_READ_MEM,      // 0 -> TM1; [reg] -> TM1
     MO_WRITE_MEM,     // 0 -> TM1; TM1 -> [reg]
 
@@ -85,7 +86,8 @@ const size_t HUC6280_MICRO_OP_CYCLES[] =
     [MO_GET_CPU_REG] = 0,
     [MO_SET_CPU_REG] = 0,
 
-    [MO_DEREF] = 1,
+    [MO_DEREF_LO] = 1,
+    [MO_DEREF_HI] = 1,
     [MO_READ_MEM] = 1,
     [MO_WRITE_MEM] = 1,
 

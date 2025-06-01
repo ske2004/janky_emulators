@@ -92,7 +92,8 @@ const char *HUC6280_MICRO_OP_TYPE_TO_STR[] =
     "GET_CPU_REG",   
     "SET_CPU_REG",   
 
-    "DEREF",
+    "DEREF_LO",
+    "DEREF_HI",
     "READ_MEM", 
     "WRITE_MEM", 
 
@@ -142,7 +143,8 @@ void HuC6280_Print_Micro_Op(micro_op Op)
         case MO_READ_NEXT_HI: 
         case MO_READ_MEM: 
         case MO_WRITE_MEM:
-        case MO_DEREF:
+        case MO_DEREF_LO:
+        case MO_DEREF_HI:
         case MO_INDEX_X_ZPG:
         case MO_INDEX_X:
         case MO_INDEX_Y:

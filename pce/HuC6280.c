@@ -68,7 +68,6 @@ void _Emit_Write(huc6280_micro_ops *MicroOps, huc6280_addr_mode AddrMode)
             break;
         case AM_ZXI:
             _Emit_IV(MicroOps, MO_WRITE_MEM, REG_PT1);
-            _Emit_IV(MicroOps, MO_WRITE_MEM, REG_PT1);
             break;
         default:
             assert(false && "TODO (emit write)");
@@ -106,9 +105,9 @@ huc6280_micro_ops _InstrToMicroOps(huc6280_decoder *Decoder, uint8_t OpCode)
             break;
         case AM_ZXI:
             _Emit_IV(&MicroOps, MO_READ_NEXT, REG_PT1);
+            _Emit_IV(&MicroOps, MO_DEREF_LO, REG_PT1);
+            _Emit_IV(&MicroOps, MO_DEREF_HI, REG_PT1);
             _Emit_IV(&MicroOps, MO_INDEX_X_ZPG, REG_PT1);
-            _Emit_IV(&MicroOps, MO_DEREF, REG_PT1);
-            _Emit_IV(&MicroOps, MO_READ_MEM, REG_PT1);
             break;
         default:
             printf("AddrMode: %d\n", AddrMode);
@@ -282,6 +281,12 @@ bool _RunMicroOp(huc6280_state *CPU, huc6280_bus *Mem)
         case MO_SET_CPU_REG:
             _SetRegister(CPU, Operand, _GetInternalReg(CPU, Operand));
             return false;
+        case MO_DEREF_LO:
+            _SetInternalRegLo(CPU, Operand, _MMU_Read(CPU, Mem, _GetInternalReg(CPU, Operand)));
+            return true;
+        case MO_DEREF_HI:
+            _SetInternalRegHi(CPU, Operand, _MMU_Read(CPU, Mem, _GetInternalReg(CPU, Operand)+1));
+            return true;
         case MO_READ_MEM:
             _SetInternalReg(CPU, Operand, _MMU_Read(CPU, Mem, _GetInternalReg(CPU, Operand)), 0xFFFF);
             return true;
