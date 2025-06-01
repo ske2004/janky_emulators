@@ -198,9 +198,9 @@ auto Hu6GetOpc(U8 opc)->Opc
   switch (opc) {
   case 0x54: return{"CSL",ADR_IMP,InstrCSL,opc,0}; // csl cyc count is unknown
   case 0x78: return{"SEI",ADR_IMP,InstrSEI,opc,2};
+  case 0xA9: return{"LDA",ADR_IMM,InstrLDA,opc,2};
   case 0xD4: return{"CSH",ADR_IMP,InstrCSH,opc,0}; // csh cyc count is unknown
   case 0xD8: return{"CLD",ADR_IMP,InstrCLD,opc,2};
-  case 0xA9: return{"LDA",ADR_IMM,InstrLDA,opc,2};
   }
 
   return{"UNK",ADR_IMP,InstrUNK,opc,0};
