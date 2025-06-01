@@ -35,7 +35,10 @@ auto Pce::Read(U32 addr) -> U8
   U32 pg = Adr2Pg(addr);
   if (pg>=0x00 && pg<=0x7F) return BinGetOob(rom, addr);
   if (pg>=0xF8 && pg<=0xFB) return ram[addr & BNK_MASK];
-  if (pg>=0xFF && pg<=0xFF) return 0xFF; // TODO: hardware pg
+  if (pg>=0xFF && pg<=0xFF) {
+    DbgErr("PCE: Read from hardware pg");
+    return 0xFF;
+  }
   return 0xFF;
 }
 
@@ -44,7 +47,7 @@ auto Pce::Write(U32 addr, U8 data) -> U0
   U32 pg = Adr2Pg(addr);
   if (pg>=0x00 && pg<=0x7F) BinSetOob(rom, addr, data);
   if (pg>=0xF8 && pg<=0xFB) ram[addr & BNK_MASK] = data;
-  if (pg>=0xFF && pg<=0xFF) return; // TODO: hardware pg
+  if (pg>=0xFF && pg<=0xFF) DbgErr("PCE: Write to hardware pg");
 }
 
 auto PceNew(Bin *rom) -> Pce*

@@ -15,11 +15,11 @@ void DbgXFmtV(U64 dbgt, const char *msg, va_list args)
 {
   CStr pfx = "";
   switch (dbgt) {
-    case DBGt_INFO: pfx = "\x1b[34m(INFO)";   break;
-    case DBGt_FAIL: pfx = "\x1b[31m(FAIL)";   break;
-    case DBGt_ERR:  pfx = "\x1b[31m(ERROR)";  break;
-    case DBGt_WARN: pfx = "\x1b[33m(WARN)";   break;
-    default:        pfx = "\x1b[33m(\?\?\?)"; break; // stupid trigraphs v_v
+    case DBGt_INFO: pfx = "\x1b[34mINFO";   break;
+    case DBGt_FAIL: pfx = "\x1b[31mFAIL";   break;
+    case DBGt_ERR:  pfx = "\x1b[31mAAAA";   break;
+    case DBGt_WARN: pfx = "\x1b[33mWARN";   break;
+    default:        pfx = "\x1b[33m\?\?\?\?"; break; // stupid trigraphs v_v
   }
 
   fprintf(stderr, "%s \x1b[37m", pfx);
