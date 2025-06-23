@@ -2,6 +2,9 @@
 #include "Bin.H"
 #include "Hu6.H"
 #include "Dbg.H"
+#include "Arr.H"
+#include "Vce.H"
+#include "Vdc.H"
 #include <cstdio>
 
 /* PC-Engine phys memory map, denoted by pg number.
@@ -14,65 +17,71 @@
  * $FF:$FF Hardware pg
  */
 
-struct Pce : Bus
+struct Pce : IBus
 {
-  Bin *rom;
+  PceBin &rom;
   Clk clk;
   Hu6 cpu;
-  U8 ram[0x2000]; // TODO: what is init ram state?
+  Vce vce;
+  Vdc vdc;
+  Arr<U8, 0x2000> ram; // TODO: what is init ram state?
+
+  Pce(PceBin &rom);
 
   auto Read(U32 addr) -> U8 override;
   auto Write(U32 addr, U8 data) -> U0 override;
+  auto Run()->U0;
 };
-
-auto Adr2Pg(U32 addr) -> U8
-{
-  return addr >> BNK_SHIFT;
-}
 
 auto Pce::Read(U32 addr) -> U8
 {
-  U32 pg = Adr2Pg(addr);
-  if (pg>=0x00 && pg<=0x7F) return BinGetOob(rom, addr);
-  if (pg>=0xF8 && pg<=0xFB) return ram[addr & BNK_MASK];
-  if (pg>=0xFF && pg<=0xFF) {
-    DbgErr("PCE: Read from hardware pg");
-    return 0xFF;
+  U32 pg = ADR_BNK(addr);
+  addr = addr&BNK_MASK;
+  if (pg>=0x00 && pg<=0x7F) return rom.Get(addr);
+  if (pg>=0xF8 && pg<=0xFB) return ram[addr];
+  if (pg==0xFF) {
+    clk.Cycle();
+    if (addr>=0x000 && addr<=0x399) {
+      return vdc.Read(Vdc::Adr(addr%4));
+    } else if (addr>=0x400 && addr<=0x7FF) {
+      return vce.Read(Vce::Adr(addr%8));
+    } else {
+      Dbg::Err("PCE: Read from hardware pg at $%04X", addr);
+    }
   }
   return 0xFF;
 }
 
 auto Pce::Write(U32 addr, U8 data) -> U0
 {
-  U32 pg = Adr2Pg(addr);
-  if (pg>=0x00 && pg<=0x7F) BinSetOob(rom, addr, data);
-  if (pg>=0xF8 && pg<=0xFB) ram[addr & BNK_MASK] = data;
-  if (pg>=0xFF && pg<=0xFF) DbgErr("PCE: Write to hardware pg");
+  U32 pg = ADR_BNK(addr);
+  addr = addr&BNK_MASK;
+  if (pg>=0x00 && pg<=0x7F) rom.Set(addr, data);
+  if (pg>=0xF8 && pg<=0xFB) ram[addr] = data;
+  if (pg==0xFF) {
+    clk.Cycle();
+    if (addr>=0x000 && addr<=0x399) {
+      vdc.Write(Vdc::Adr(addr%4), data);
+    } else if (addr>=0x400 && addr<=0x7FF) {
+      vce.Write(Vce::Adr(addr%8), data);
+    } else {
+      Dbg::Err("PCE: Write to hardware pg $%04X", addr);
+    }
+  }
 }
 
-auto PceNew(Bin *rom) -> Pce*
+Pce::Pce(PceBin &rom) : 
+  rom(rom),
+  ram({}),
+  clk([this](){ /* TODO: aux cycle for vdc and cpu */}),
+  cpu(*this, this->clk)
 {
-  auto pce=new Pce;
-  pce->rom=rom;
-  pce->clk=ClkNew(pce, [](void *userdata){
-    auto pce = (Pce*)userdata;
-    // TODO: aux cycle for vdc and apu
-  });
-  pce->cpu=Hu6New(pce, pce->clk);
-  DbgInfo("PCE: new, rom: %p", rom);
-  return pce;
 }
 
-auto PceDel(Pce &pce) -> U0
+auto Pce::Run()->U0
 {
-  DbgInfo("PCE: del");
-  delete &pce;
-}
-
-auto PceRun(Pce &pce) -> U0
-{
-  DbgInfo("PCE: run");
-  Hu6Run(pce.cpu);
+  Dbg::Info("PCE: run");
+  cpu.Run();
 }
 
 auto main(I32 argc, CStr argv[]) -> I32
@@ -82,13 +91,12 @@ auto main(I32 argc, CStr argv[]) -> I32
     return 1;
   }
 
-  DbgInfo("MAIN: Loading ROM %s", argv[1]);
-  Bin *rom = BinRead(argv[1]);
-  if (!rom) {
-    DbgFail("Failed to load ROM\n");
+  Dbg::Info("MAIN: Loading ROM %s", argv[1]);
+  try {
+    PceBin bin(argv[1]);
+    Pce pce(bin);
+    pce.Run();
+  } catch (CStr err) {
+    Dbg::Fail("Fatal error: %s\n", err);
   }
-  Pce *pce = PceNew(rom);
-  PceRun(*pce);
-  PceDel(*pce);
-  BinDel(rom);
 }
