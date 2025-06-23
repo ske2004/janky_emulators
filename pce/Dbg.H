@@ -11,7 +11,10 @@
 #define DBGt_ERR   2 // error
 #define DBGt_WARN  3 // warning
 
-void DbgXFmtV(U64 dbgt, const char *msg, va_list args)
+namespace Dbg
+{
+
+void XFmtV(U64 dbgt, const char *msg, va_list args)
 {
   CStr pfx = "";
   switch (dbgt) {
@@ -28,35 +31,37 @@ void DbgXFmtV(U64 dbgt, const char *msg, va_list args)
 }
 
 [[noreturn]]
-void DbgFail(const char *msg, ...)
+void Fail(const char *msg, ...)
 {
   va_list args;
   va_start(args, msg);
-  DbgXFmtV(DBGt_FAIL, msg, args);
+  XFmtV(DBGt_FAIL, msg, args);
   va_end(args);
   exit(1);
 }
 
-void DbgErr(const char *msg, ...)
+void Err(const char *msg, ...)
 {
   va_list args;
   va_start(args, msg);
-  DbgXFmtV(DBGt_ERR, msg, args);
+  XFmtV(DBGt_ERR, msg, args);
   va_end(args);
 }
 
-void DbgWarn(const char *msg, ...)
+void Warn(const char *msg, ...)
 {
   va_list args;
   va_start(args, msg);
-  DbgXFmtV(DBGt_WARN, msg, args);
+  XFmtV(DBGt_WARN, msg, args);
   va_end(args);
 }
 
-void DbgInfo(const char *msg, ...)
+void Info(const char *msg, ...)
 {
   va_list args;
   va_start(args, msg);
-  DbgXFmtV(DBGt_INFO, msg, args);
+  XFmtV(DBGt_INFO, msg, args);
   va_end(args);
+}
+
 }

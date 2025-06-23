@@ -2,36 +2,21 @@
 #pragma once
 
 #include "Basics.H"
+#include <functional>
 
-using ClkAuxCycle = void (*)(void *);
+using ClkAuxCycle = std::function<void()>;
 
 struct Clk
 {
-  U64 counter;
-  Bool halted;
-  void *userdata;
-  ClkAuxCycle AuxCycle; // aux cycle fn for simpler than CPU
+  U64 counter=0;
+  Bool halted=false;
+  Bool ignoring=false;
+  ClkAuxCycle aux_cycle; // aux cycle fn for simpler than CPU
+
+  Clk(ClkAuxCycle aux_cycle) : aux_cycle(aux_cycle) {}
+  auto Ignore(std::function<void()> cb)->void { ignoring=true; cb(); ignoring=false; }
+  auto Halt()->void { halted = true; }
+  auto Cycle()->void { if (!ignoring) {counter++; aux_cycle();} }
+  auto IsGoing()->Bool { return !halted; }
 };
 
-auto ClkNew(void *userdata, ClkAuxCycle AuxCycle) -> Clk
-{
-  Clk clk = {};
-  clk.AuxCycle = AuxCycle;
-  return clk;
-}
-
-auto ClkHalt(Clk &clk) -> void
-{
-  clk.halted = true;
-}
-
-auto ClkCycle(Clk &clk) -> void
-{
-  clk.counter++;
-  clk.AuxCycle(clk.userdata);
-}
-
-auto ClkIsGoing(Clk &clk) -> bool
-{
-  return !clk.halted;
-}

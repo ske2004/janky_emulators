@@ -5,70 +5,56 @@
 #include "Dbg.H"
 #include <cstdlib>
 #include <cstdio>
+#include <memory>
 
 struct Bin
 {
   U64 sz;
-  U8 dat[0];
+  U8 *dat;
 };
 
-auto BinNew(U64 sz)->Bin*
+class PceBin : private Bin
 {
-  DbgInfo("BIN: new, size: $%llx", sz);
-  auto bin=(Bin*)malloc(sizeof(Bin)+sz);
-  bin->sz=sz;
-  return bin;
+public:
+  PceBin(CStr path);
+  ~PceBin();
+
+  auto Get(U64 addr)->U8;
+  auto Set(U64 addr, U8 data)->void;
+};
+
+PceBin::PceBin(CStr path)
+{
+  std::unique_ptr<FILE, int(*)(FILE*)> f(fopen(path, "rb"), fclose);
+
+  if (f.get() == nullptr)
+    throw "file not found";
+
+  fseek(f.get(), 0, SEEK_END);
+  sz=ftell(f.get());
+  dat=(U8*)malloc(sz);
+  fseek(f.get(), 0, SEEK_SET);
+  if (fread(dat, 1, sz, f.get())!=sz)
+    throw "can't read";
 }
 
-auto BinDel(Bin *bin)
+PceBin::~PceBin()
 {
-  free(bin);
-}
-
-auto BinRead(CStr path)->Bin*
-{
-  FILE *f=fopen(path, "rb");
-  if (!f)
-    return nullptr;
-  fseek(f, 0, SEEK_END);
-  U64 sz=ftell(f);
-  fseek(f, 0, SEEK_SET);
-  Bin *bin=BinNew(sz);
-  if (fread(bin->dat, 1, sz, f)!=sz) {
-    fclose(f);
-    BinDel(bin);
-    return nullptr;
-  }
-  fclose(f);
-  return bin;
-}
-
-auto BinWrite(CStr path, Bin *bin)->Bool
-{
-  FILE *f=fopen(path, "wb");
-  if (!f)
-    return false;
-  if (fwrite(bin->dat, 0, bin->sz, f) != bin->sz) {
-    fclose(f);
-    return false;
-  }
-  fclose(f);
-  return true;
+  free(dat);
 }
 
 /* reads out of bounds by returning 0xFF */
-auto BinGetOob(Bin *bin, U64 addr)->U8
+auto PceBin::Get(U64 addr)->U8
 {
-  if (addr>=bin->sz)
+  if (addr>=sz)
     return 0xFF;
-  return bin->dat[addr];
+  return dat[addr];
 }
 
 /* writes out of bounds by doing nothing */
-auto BinSetOob(Bin *bin, U64 addr, U8 data)->Bool
+auto PceBin::Set(U64 addr, U8 data)->void
 {
-  if (addr>=bin->sz)
-    return false;
-  bin->dat[addr] = data;
-  return true;
+  if (addr>=sz)
+    return;
+  dat[addr] = data;
 }
