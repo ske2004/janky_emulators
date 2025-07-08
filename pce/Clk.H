@@ -8,6 +8,7 @@ using ClkAuxCycle = std::function<void()>;
 
 struct Clk
 {
+  U64 extra_counter=0;
   U64 counter=0;
   Bool halted=false;
   Bool ignoring=false;
@@ -16,6 +17,7 @@ struct Clk
   Clk(ClkAuxCycle aux_cycle) : aux_cycle(aux_cycle) {}
   auto Ignore(std::function<void()> cb)->void { ignoring=true; cb(); ignoring=false; }
   auto Halt()->void { halted = true; }
+  auto ExtraCycle()->void { if (!ignoring) {extra_counter++; counter++; aux_cycle();} }
   auto Cycle()->void { if (!ignoring) {counter++; aux_cycle();} }
   auto IsGoing()->Bool { return !halted; }
 };

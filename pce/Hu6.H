@@ -113,11 +113,13 @@ auto Hu6MemMap(Hu6 &cpu, U16 addr) -> U32
 
 auto Hu6Cycle(Hu6 &cpu)
 {
-  if (cpu.fast)
-    cpu.clk.Cycle();
-  else
-    for (U8 i=0; i<4; i++) // TODO: 4 is approximate?
+  if (cpu.fast) {
+    for (U8 i=0; i<3; i++) 
       cpu.clk.Cycle();
+  } else {
+    for (U8 i=0; i<12; i++) 
+      cpu.clk.Cycle();
+  }
 }
 
 auto Hu6ReadMem(Hu6 &cpu, U16 addr) -> U8
@@ -213,42 +215,36 @@ auto InstrSEI(Hu6 &cpu, Opc opc)
 {
   Hu6ReadMem(cpu, cpu.pc);
   cpu.flags|= FLG_INT;
-  cpu.flags&=~FLG_MEM;
 }
 
 auto InstrCSH(Hu6 &cpu, Opc opc)
 {
   Hu6ReadMem(cpu, cpu.pc);
   cpu.fast = true;
-  cpu.flags&=~FLG_MEM;
 }
 
 auto InstrCSL(Hu6 &cpu, Opc opc)
 {
   Hu6ReadMem(cpu, cpu.pc);
   cpu.fast = false;
-  cpu.flags&=~FLG_MEM;
 }
 
 auto InstrCLD(Hu6 &cpu, Opc opc)
 {
   Hu6ReadMem(cpu, cpu.pc);
   cpu.flags&=~FLG_DEC;
-  cpu.flags&=~FLG_MEM;
 }
 
 auto InstrLDX(Hu6 &cpu, Opc opc)
 {
   Hu6Adr adr = Hu6AdrNew(cpu, opc.addr_mode);
   cpu.x=Hu6SetNZ(cpu, AdrRead(adr));
-  cpu.flags&=~FLG_MEM;
 }
 
 auto InstrLDA(Hu6 &cpu, Opc opc)
 {
   Hu6Adr adr = Hu6AdrNew(cpu, opc.addr_mode);
   cpu.a=Hu6SetNZ(cpu, AdrRead(adr));
-  cpu.flags&=~FLG_MEM;
 }
 
 auto InstrTAM(Hu6 &cpu, Opc opc)
@@ -259,21 +255,18 @@ auto InstrTAM(Hu6 &cpu, Opc opc)
     if (mask&(1<<i))
       cpu.mpr[i]=cpu.a;
   }
-  cpu.flags&=~FLG_MEM;
 }
 
 auto InstrTXS(Hu6 &cpu, Opc opc)
 {
   Hu6ReadMem(cpu, cpu.pc);
   cpu.sp=cpu.x;
-  cpu.flags&=~FLG_MEM;
 }
 
 auto InstrSTZ(Hu6 &cpu, Opc opc)
 {
   Hu6Adr adr=Hu6AdrNew(cpu, opc.addr_mode);
   AdrWrite(adr, 0);
-  cpu.flags&=~FLG_MEM;
 }
 
 auto InstrTII(Hu6 &cpu, Opc opc)
@@ -301,8 +294,6 @@ auto InstrTII(Hu6 &cpu, Opc opc)
   cpu.a=StkPop(cpu);
   cpu.y=StkPop(cpu);
 
-  cpu.flags&=~FLG_MEM;
-
   U64 cyc_total=cpu.clk.counter-clk_start;
   U64 cyc_tran=clk_tran_end-clk_tran_start;
   U64 cyc_notran=cyc_total-cyc_tran+1; // account for opc cycle
@@ -321,14 +312,12 @@ auto InstrJSR(Hu6 &cpu, Opc opc)
   Dbg::Info("CPU: JSR: pc:$%04hX, addr:$%04hX", (cpu.pc-1), addr);
 
   cpu.pc=addr;
-  cpu.flags&=~FLG_MEM;
 }
 
 auto InstrSTA(Hu6 &cpu, Opc opc)
 {
   Hu6Adr adr=Hu6AdrNew(cpu, opc.addr_mode);
   AdrWrite(adr, cpu.a);
-  cpu.flags&=~FLG_MEM;
 }
 
 auto InstrRTS(Hu6 &cpu, Opc opc)
@@ -338,14 +327,12 @@ auto InstrRTS(Hu6 &cpu, Opc opc)
   cpu.pc|=StkPop(cpu)<<8;
   cpu.pc++;
   Dbg::Info("CPU: RTS: pc:$%04hX", cpu.pc);
-  cpu.flags&=~FLG_MEM;
 }
 
 auto InstrCLX(Hu6 &cpu, Opc opc)
 {
   Hu6ReadMem(cpu, cpu.pc);
   cpu.x=0;
-  cpu.flags&=~FLG_MEM;
 }
 
 auto InstrCMP(Hu6 &cpu, Opc opc)
@@ -356,7 +343,6 @@ auto InstrCMP(Hu6 &cpu, Opc opc)
   Hu6SetFlag(cpu, FLG_CAR, cpu.a>=check);
   Hu6SetFlag(cpu, FLG_ZER, cpu.a==check);
   Hu6SetFlag(cpu, FLG_NEG, result&0x80);
-  cpu.flags&=~FLG_MEM;
 }
 
 auto InstrBEQ(Hu6 &cpu, Opc opc)
@@ -369,10 +355,24 @@ auto InstrBEQ(Hu6 &cpu, Opc opc)
   }
 }
 
+auto InstrBRA(Hu6 &cpu, Opc opc)
+{
+  I8 rel=Hu6ReadMem(cpu, cpu.pc++);
+  /* TODO: handle page crossing cycle */
+  cpu.clk.Cycle();
+  cpu.pc += rel;
+}
+
 auto InstrINX(Hu6 &cpu, Opc opc)
 {
   Hu6ReadMem(cpu, cpu.pc);
   cpu.x++;
+}
+
+auto InstrCLA(Hu6 &cpu, Opc opc)
+{
+  Hu6ReadMem(cpu, cpu.pc);
+  cpu.a=0;
 }
 
 auto Hu6GetOpc(U8 opc)->Opc
@@ -382,15 +382,18 @@ auto Hu6GetOpc(U8 opc)->Opc
   case 0x53:return{"TAM",ADR_IMP,InstrTAM,opc,5};
   case 0x54:return{"CSL",ADR_IMP,InstrCSL,opc,0}; // csl cyc count is unknown
   case 0x60:return{"RTS",ADR_IMP,InstrRTS,opc,7};
+  case 0x62:return{"CLA",ADR_IMP,InstrCLA,opc,2};
   case 0x64:return{"STZ",ADR_ZPG,InstrSTZ,opc,4};
   case 0x73:return{"TII",ADR_IMP,InstrTII,opc,0}; // blk transfer instr can be variable
   case 0x78:return{"SEI",ADR_IMP,InstrSEI,opc,2};
+  case 0x80:return{"BRA",ADR_REL,InstrBRA,opc,4};
   case 0x82:return{"CLX",ADR_IMP,InstrCLX,opc,2};
   case 0x85:return{"STA",ADR_ZPG,InstrSTA,opc,4};
   case 0x8D:return{"STA",ADR_ABS,InstrSTA,opc,5};
   case 0x9A:return{"TXS",ADR_IMP,InstrTXS,opc,2};
   case 0xA2:return{"LDX",ADR_IMM,InstrLDX,opc,2};
   case 0xA9:return{"LDA",ADR_IMM,InstrLDA,opc,2};
+  case 0xAD:return{"LDA",ADR_ABS,InstrLDA,opc,5};
   case 0xBD:return{"LDA",ADR_ABX,InstrLDA,opc,5};
   case 0xC9:return{"CMP",ADR_IMM,InstrCMP,opc,2};
   case 0xD4:return{"CSH",ADR_IMP,InstrCSH,opc,0}; // csh cyc count is unknown
@@ -403,7 +406,6 @@ auto Hu6GetOpc(U8 opc)->Opc
 }
 
 
-
 auto Hu6::Run() -> void
 {
   while (this->clk.IsGoing()) {
@@ -411,14 +413,18 @@ auto Hu6::Run() -> void
     U64 cyc_pre=this->clk.counter;
     U8 opc_id=Hu6ReadMem(*this, pc++);
     Opc opc=Hu6GetOpc(opc_id);
-    fprintf(stderr, "\n");
+    fprintf(stderr, "\n"); /* TODO add sections to Dbg */
     Dbg::Info("CPU: $%04X ($%06X) %s", this->instr_pc, Hu6MemMap(*this, this->instr_pc), opc.instr_name);
+    /* TODO disable for mem flag set instruction */
+    this->flags&=~FLG_MEM;
     opc.Handler(*this, opc);
     U64 cyc_post=this->clk.counter;
+    I64 cyc_diff=cyc_post-cyc_pre-clk.extra_counter;
+    clk.extra_counter=0; /* HACK */
     if (!this->fast) opc.ref_cyc*=4;
-    if (opc.ref_cyc!=0 && cyc_post-cyc_pre!=opc.ref_cyc) {
-      Dbg::Warn("CPU: cyc mismatch %s (exp:%d,got:%d) PC=%04X CYC=%08X",
-              opc.instr_name, opc.ref_cyc, cyc_post-cyc_pre, instr_pc, cyc_post-cyc_pre);
+    if (opc.ref_cyc!=0 && cyc_diff!=opc.ref_cyc) {
+      Dbg::Warn("CPU: cyc mismatch %s (exp:%d,got:%d) PC=%04X CYC=%08d",
+              opc.instr_name, opc.ref_cyc, cyc_diff, instr_pc, clk.counter);
     }
   }
 }

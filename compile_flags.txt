@@ -1,2 +1,5 @@
 -I
 bin/SDL3-x64/include
+-std=c++20
+-I
+.
