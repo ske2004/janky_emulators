@@ -7,6 +7,8 @@
  * $FC:$FE Unused (ret $FF)
  * $FF:$FF Hardware pg [see HwPage.H]
  */
+#pragma once
+
 #include "Basics.H"
 #include "Bin.H"
 #include "Hu6.H"
@@ -15,7 +17,7 @@
 #include "HwPage.H"
 #include "Vce.H"
 #include "Vdc.H"
-#include <cstdio>
+#include "PceOut.H"
 
 struct Pce : IBus
 {
@@ -31,7 +33,7 @@ struct Pce : IBus
 
   auto Read(U32 addr) -> U8 override;
   auto Write(U32 addr, U8 data) -> U0 override;
-  auto Run()->U0;
+  auto Run(PceOut &out)->U0;
 };
 
 auto Pce::Read(U32 addr) -> U8
@@ -68,7 +70,7 @@ Pce::Pce(PceBin &rom) :
 {
 }
 
-auto Pce::Run()->U0
+auto Pce::Run(PceOut &out)->U0
 {
   Dbg::Info("PCE: run");
   cpu.Run();

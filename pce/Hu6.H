@@ -8,7 +8,6 @@
 #include "Clk.H"
 #include "Dbg.H"
 #include <cassert>
-#include <string>
 
 /* cpu starts at bank 7 */
 #define BNK_START 7
@@ -83,6 +82,7 @@ struct Hu6Adr
 {
   Hu6 *cpu;
   Bool isimm;
+  Bool isa;
   U8 imm;
   U16 adr; /* effective address */
 };
@@ -95,6 +95,11 @@ struct Opc
   U8 opc;
   U8 ref_cyc; // reference cycle count, 0 for when unknown like blk transfer ops
 };
+
+auto Hu6Carry(Hu6 &cpu)
+{
+  return (cpu.flags & FLG_CAR) > 0;
+}
 
 auto Hu6SetFlag(Hu6 &cpu, U8 flag, Bool set)
 {
@@ -177,7 +182,8 @@ auto Hu6AdrNew(Hu6 &cpu, U64 addr_mode) -> Hu6Adr
   case ADR_ZPG: adr.adr=Hu6ReadMem(cpu, cpu.pc++)+ZPG_START; break;
   case ADR_ABS: adr.adr=Hu6ReadMem(cpu, cpu.pc++); adr.adr|=Hu6ReadMem(cpu, cpu.pc++)<<8; break;
   case ADR_ABX: adr.adr=Hu6ReadMem(cpu, cpu.pc++); adr.adr|=Hu6ReadMem(cpu, cpu.pc++)<<8; adr.adr+=cpu.x; break;
-  default: Dbg::Fail("CPU: AdrNew on unknown adr mode %02X PC=%04X CYC=%08X\n", addr_mode, cpu.instr_pc, cpu.clk.counter);
+  case ADR_ACC: /* dumdum */ Hu6ReadMem(cpu, cpu.pc); adr.isa=true; adr.imm=cpu.a; break;
+  default: Dbg::Fail("CPU: AdrNew on unknown adr mode %02X PC=%04X CYC=%08X\n", addr_mode, cpu.instr_pc, cpu.clk.counter); break;
   }
 
   return adr;
@@ -190,6 +196,11 @@ auto AdrRead(Hu6Adr &adr) -> U8
     return adr.imm;
   }
 
+  if (adr.isa) {
+    Dbg::Info("CPU: AdrRead A: %02X", adr.imm);
+    return adr.imm;
+  }
+
   U8 val = Hu6ReadMem(*adr.cpu, adr.adr);
   Dbg::Info("CPU: AdrRead SRC:$%04X VAL:%02X", adr.adr, val);
   return val;
@@ -199,6 +210,12 @@ auto AdrWrite(Hu6Adr &adr, U8 data) -> void
 {
   if (adr.isimm) {
     Dbg::Fail("CPU: AdrWrite on IMM adr mode o_o");
+  }
+
+  if (adr.isa) {
+    Dbg::Info("CPU: AdrWrite A VAL:%02X", data);
+    adr.cpu->a = data;
+    return;
   }
 
   Dbg::Info("CPU: AdrWrite DST:%04X VAL:%02X", adr.adr, data);
@@ -375,15 +392,48 @@ auto InstrCLA(Hu6 &cpu, Opc opc)
   cpu.a=0;
 }
 
+auto InstrCLC(Hu6 &cpu, Opc opc) 
+{
+  Hu6ReadMem(cpu, cpu.pc);
+  Hu6SetFlag(cpu, FLG_CAR, 0);
+}
+
+auto InstrADC(Hu6 &cpu, Opc opc)
+{
+  Hu6Adr adr=Hu6AdrNew(cpu, opc.addr_mode);
+  I8 val = AdrRead(adr);
+  I16 a = (I16)cpu.a + (I16)val + (I16)Hu6Carry(cpu);
+  I8 res = (I8)cpu.a + (I8)val + (I8)Hu6Carry(cpu);
+  // god i hope this works
+  Hu6SetFlag(cpu, FLG_CAR, (a>>8)&0x7F);
+  Hu6SetFlag(cpu, FLG_NEG, res<0);
+  Hu6SetFlag(cpu, FLG_ZER, res==0);
+  Hu6SetFlag(cpu, FLG_OFW, a<-128 || a>127);
+  cpu.a = res;
+}
+
+auto InstrINC(Hu6 &cpu, Opc opc)
+{
+  Hu6Adr adr=Hu6AdrNew(cpu, opc.addr_mode);
+  I8 res = AdrRead(adr);
+  res++;
+  Hu6SetFlag(cpu, FLG_NEG, res<0);
+  Hu6SetFlag(cpu, FLG_ZER, res==0);
+  AdrWrite(adr, res);
+}
+
 auto Hu6GetOpc(U8 opc)->Opc
 {
   switch (opc) {
+  case 0x18:return{"CLC",ADR_IMP,InstrCLC,opc,2};
+  case 0x1A:return{"INC",ADR_ACC,InstrINC,opc,2};
   case 0x20:return{"JSR",ADR_ABS,InstrJSR,opc,7};
   case 0x53:return{"TAM",ADR_IMP,InstrTAM,opc,5};
   case 0x54:return{"CSL",ADR_IMP,InstrCSL,opc,0}; // csl cyc count is unknown
   case 0x60:return{"RTS",ADR_IMP,InstrRTS,opc,7};
   case 0x62:return{"CLA",ADR_IMP,InstrCLA,opc,2};
   case 0x64:return{"STZ",ADR_ZPG,InstrSTZ,opc,4};
+  case 0x65:return{"ADC",ADR_ZPG,InstrADC,opc,4};
   case 0x73:return{"TII",ADR_IMP,InstrTII,opc,0}; // blk transfer instr can be variable
   case 0x78:return{"SEI",ADR_IMP,InstrSEI,opc,2};
   case 0x80:return{"BRA",ADR_REL,InstrBRA,opc,4};
