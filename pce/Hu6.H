@@ -183,7 +183,7 @@ auto Hu6AdrNew(Hu6 &cpu, U64 addr_mode) -> Hu6Adr
   case ADR_ABS: adr.adr=Hu6ReadMem(cpu, cpu.pc++); adr.adr|=Hu6ReadMem(cpu, cpu.pc++)<<8; break;
   case ADR_ABX: adr.adr=Hu6ReadMem(cpu, cpu.pc++); adr.adr|=Hu6ReadMem(cpu, cpu.pc++)<<8; adr.adr+=cpu.x; break;
   case ADR_ACC: /* dumdum */ Hu6ReadMem(cpu, cpu.pc); adr.isa=true; adr.imm=cpu.a; break;
-  default: Dbg::Fail("CPU: AdrNew on unknown adr mode %02X PC=%04X CYC=%08X\n", addr_mode, cpu.instr_pc, cpu.clk.counter); break;
+  default: Dbg::Fail("CPU/A", "AdrNew on unknown adr mode %02X PC=%04X CYC=%08llX\n", (int)addr_mode, cpu.instr_pc, cpu.clk.counter); break;
   }
 
   return adr;
@@ -192,40 +192,40 @@ auto Hu6AdrNew(Hu6 &cpu, U64 addr_mode) -> Hu6Adr
 auto AdrRead(Hu6Adr &adr) -> U8
 {
   if (adr.isimm) {
-    Dbg::Info("CPU: AdrRead IMM: %02X", adr.imm);
+    Dbg::Info("CPU/A", "AdrRead IMM: %02X", adr.imm);
     return adr.imm;
   }
 
   if (adr.isa) {
-    Dbg::Info("CPU: AdrRead A: %02X", adr.imm);
+    Dbg::Info("CPU/A", "AdrRead A: %02X", adr.imm);
     return adr.imm;
   }
 
   U8 val = Hu6ReadMem(*adr.cpu, adr.adr);
-  Dbg::Info("CPU: AdrRead SRC:$%04X VAL:%02X", adr.adr, val);
+  Dbg::Info("CPU/A", "AdrRead SRC:$%04X VAL:%02X", adr.adr, val);
   return val;
 }
 
 auto AdrWrite(Hu6Adr &adr, U8 data) -> void
 {
   if (adr.isimm) {
-    Dbg::Fail("CPU: AdrWrite on IMM adr mode o_o");
+    Dbg::Fail("CPU/A", "AdrWrite on IMM adr mode o_o");
   }
 
   if (adr.isa) {
-    Dbg::Info("CPU: AdrWrite A VAL:%02X", data);
+    Dbg::Info("CPU/A", "AdrWrite A VAL:%02X", data);
     adr.cpu->a = data;
     return;
   }
 
-  Dbg::Info("CPU: AdrWrite DST:%04X VAL:%02X", adr.adr, data);
+  Dbg::Info("CPU/A", "AdrWrite DST:%04X VAL:%02X", adr.adr, data);
   Hu6ReadMem(*adr.cpu, adr.adr); // dummy
   Hu6WriteMem(*adr.cpu, adr.adr, data);
 }
 
 auto InstrUNK(Hu6 &cpu, Opc opc)
 {
-  Dbg::Fail("CPU: UNK opcode %02X PC=%04X CYC=%08X\n", opc.opc, cpu.instr_pc, cpu.clk.counter);
+  Dbg::Fail("CPU/A", "UNK opcode %02X PC=%04X CYC=%08llX\n", opc.opc, cpu.instr_pc, cpu.clk.counter);
 }
 
 auto InstrSEI(Hu6 &cpu, Opc opc)
@@ -267,7 +267,7 @@ auto InstrLDA(Hu6 &cpu, Opc opc)
 auto InstrTAM(Hu6 &cpu, Opc opc)
 {
   U8 mask=Hu6ReadMem(cpu, cpu.pc++);
-  Dbg::Info("CPU: TAM: %02X=%02X", mask, cpu.a);
+  Dbg::Info("CPU/I", "TAM: %02X=%02X", mask, cpu.a);
   for (U8 i=0; i<8; i++) {
     if (mask&(1<<i))
       cpu.mpr[i]=cpu.a;
@@ -315,7 +315,7 @@ auto InstrTII(Hu6 &cpu, Opc opc)
   U64 cyc_tran=clk_tran_end-clk_tran_start;
   U64 cyc_notran=cyc_total-cyc_tran+1; // account for opc cycle
 
-  Dbg::Warn("CPU: BLK TII: cyctot:%d, cyctrn:%d, cycntr:%d, len:%04hx", cyc_total, cyc_tran, cyc_notran, len_orig);
+  Dbg::Warn("CPU/I", "BLK TII: cyctot:%lld, cyctrn:%lld, cycntr:%lld, len:%04hX", cyc_total, cyc_tran, cyc_notran, len_orig);
 }
 
 auto InstrJSR(Hu6 &cpu, Opc opc)
@@ -326,7 +326,7 @@ auto InstrJSR(Hu6 &cpu, Opc opc)
   StkPush(cpu, (cpu.pc-1)>>8);
   StkPush(cpu, (cpu.pc-1)&0xff);
 
-  Dbg::Info("CPU: JSR: pc:$%04hX, addr:$%04hX", (cpu.pc-1), addr);
+  Dbg::Info("CPU/I", "JSR: pc:$%04hX, addr:$%04hX", (cpu.pc-1), addr);
 
   cpu.pc=addr;
 }
@@ -343,7 +343,7 @@ auto InstrRTS(Hu6 &cpu, Opc opc)
   cpu.pc=StkPop(cpu);
   cpu.pc|=StkPop(cpu)<<8;
   cpu.pc++;
-  Dbg::Info("CPU: RTS: pc:$%04hX", cpu.pc);
+  Dbg::Info("CPU/I", "RTS: pc:$%04hX", cpu.pc);
 }
 
 auto InstrCLX(Hu6 &cpu, Opc opc)
@@ -463,8 +463,7 @@ auto Hu6::Run() -> void
     U64 cyc_pre=this->clk.counter;
     U8 opc_id=Hu6ReadMem(*this, pc++);
     Opc opc=Hu6GetOpc(opc_id);
-    fprintf(stderr, "\n"); /* TODO add sections to Dbg */
-    Dbg::Info("CPU: $%04X ($%06X) %s", this->instr_pc, Hu6MemMap(*this, this->instr_pc), opc.instr_name);
+    Dbg::Info("CPU/I", "$%04X ($%06X) %s", this->instr_pc, Hu6MemMap(*this, this->instr_pc), opc.instr_name);
     /* TODO disable for mem flag set instruction */
     this->flags&=~FLG_MEM;
     opc.Handler(*this, opc);
@@ -473,7 +472,7 @@ auto Hu6::Run() -> void
     clk.extra_counter=0; /* HACK */
     if (!this->fast) opc.ref_cyc*=4;
     if (opc.ref_cyc!=0 && cyc_diff!=opc.ref_cyc) {
-      Dbg::Warn("CPU: cyc mismatch %s (exp:%d,got:%d) PC=%04X CYC=%08d",
+      Dbg::Warn("CPU/I", "cyc mismatch %s (exp:%d,got:%lld) PC=%04X CYC=%08lld",
               opc.instr_name, opc.ref_cyc, cyc_diff, instr_pc, clk.counter);
     }
   }

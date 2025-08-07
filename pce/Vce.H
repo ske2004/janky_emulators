@@ -2,8 +2,16 @@
 
 #include "Basics.H"
 #include "Dbg.H"
+
+
 struct Vce
 {
+  /* xxxxxxxBBBGGGRRR */
+  using Color=U16;
+
+  /* 000=bg 100=spr */
+  Color entries[512];
+
   enum class Adr {
     CTRL      =0,
     UNUSED0   =1,
@@ -20,15 +28,16 @@ struct Vce
   auto Write(Adr adr, U8 data) -> void
   {
     switch (adr) {
-    case Adr::CTRL: Dbg::Info("VCE: Write to CTRL: $%02X", data); break;
-    default: Dbg::Info("VCE: Write to unhandled %d", adr); break;
+    case Adr::CTRL: Dbg::Info("VCE/W", "Write to CTRL: $%02X", data); break;
+    default: Dbg::Info("VCE/W", "Write to unhandled %d", adr); break;
     }
   }
 
   auto Read(Adr adr) -> U8 
   {
     switch (adr) {
-    default: Dbg::Info("VCE: Read from unhandled %d", adr); break;
+    case Adr::CTRL: return 0xFF; break;
+    default: Dbg::Info("VCE/R", "Read from unhandled %d", adr); break;
     }
 
     return 0;

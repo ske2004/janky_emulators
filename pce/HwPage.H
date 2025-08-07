@@ -79,7 +79,7 @@ struct HwPage
   {
     Sub sub = Sub(addr>>10);
     if (sub >= Sub::_COUNT) {
-      Dbg::Fail("Read from invalid subpage");
+      Dbg::Fail("HWP/R", "Read from invalid subpage");
     }
 
     Uxx mirror_every = MIRROR_EVERY[int(sub)];
@@ -93,7 +93,7 @@ struct HwPage
       if (addr_mirrored == 0) {
         return (_timer.value_current&0x7F)|(_buffer_byte|0x80);
       } else if (addr_mirrored == 1) {
-        return (_timer.enabled&0x7F)|(_buffer_byte|0x80);
+        return (int(_timer.enabled)&0x7F)|(_buffer_byte|0x80);
       }
       return 0xFF;
     case Sub::ICTL:
@@ -107,7 +107,7 @@ struct HwPage
     case Sub::IO:
     case Sub::CDROM:
     case Sub::FF:
-      Dbg::Err("HwPage %d Read: TODO", sub);
+      Dbg::Err("HWP/R", "HwPage %d Read: TODO", sub);
       return 0xFF;
     default:
       [[assume(false)]];
@@ -119,7 +119,7 @@ struct HwPage
   {
     Sub sub = Sub(addr>>10);
     if (sub >= Sub::_COUNT) {
-      Dbg::Fail("Write to invalid subpage");
+      Dbg::Fail("HWP/W", "Write to invalid subpage");
     }
 
     if (IO_BUFFER.Has(addr)) {
@@ -153,7 +153,7 @@ struct HwPage
     case Sub::IO:
     case Sub::CDROM:
     case Sub::FF:
-      Dbg::Err("HwPage %d Write: TODO", sub);
+      Dbg::Err("HWP/W", "HwPage %d Write: TODO", sub);
       return;
     default:
       [[assume(false)]];
@@ -166,7 +166,7 @@ struct HwPage
     if (clk.counter%3==0) {
       _timer.clocks++;
       if (_timer.clocks%1024==0) {
-        Dbg::Info("Timer tick!");
+        Dbg::Info("HWP/C", "Timer tick!");
         if (_timer.enabled) {
           if (_timer.value_current==0) {
             _timer.value_current = _timer.value_reload;

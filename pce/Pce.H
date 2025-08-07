@@ -7,6 +7,15 @@
  * $FC:$FE Unused (ret $FF)
  * $FF:$FF Hardware pg [see HwPage.H]
  */
+
+/* TIMING
+ * 21.47727MHz Master clock
+ * 7.16                 CPU (high speed)
+ * 1.78                 CPU (low speed)
+ * 7.16                 Timer
+ * 10.8 or 7.16 or 5.36 VCE/VDC
+ */
+
 #pragma once
 
 #include "Basics.H"
@@ -72,7 +81,7 @@ Pce::Pce(PceBin &rom) :
 
 auto Pce::Run(PceOut &out)->U0
 {
-  Dbg::Info("PCE: run");
+  Dbg::Info("PCE", "run");
   cpu.Run();
 }
 

@@ -55,13 +55,18 @@ auto main(I32 argc, CStr argv[]) -> I32
     return 1;
   }
 
-  Dbg::Info("MAIN: Loading ROM %s", argv[1]);
+  Dbg::Disable({
+    "CPU/I",
+    "CPU/A"
+  });
+
+  Dbg::Info("MAIN", "Loading ROM %s", argv[1]);
 
   try {
     PcPow pcpow(argv[1]);
     if (pcpow.Construct(PCE_SCREEN_W, PCE_SCREEN_H, 3, 3))
       pcpow.Start();
   } catch (CStr err) {
-    Dbg::Fail("Fatal error: %s\n", err);
+    Dbg::Fail("MAIN", "Fatal error: %s\n", err);
   }
 }

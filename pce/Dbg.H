@@ -5,6 +5,8 @@
 #include <cstdio>
 #include <cstdarg>
 #include <cstdlib>
+#include <set>
+#include <string>
 
 #define DBGt_INFO  0 // normal log
 #define DBGt_FAIL  1 // fatal error
@@ -14,53 +16,68 @@
 namespace Dbg
 {
 
-void XFmtV(U64 dbgt, const char *msg, va_list args)
+std::set<std::string> _ignored;
+
+void XFmtV(U64 dbgt, const char *scope, const char *msg, va_list args)
 {
-  CStr pfx = "";
-  switch (dbgt) {
-    case DBGt_INFO: pfx = "\x1b[34mINFO";   break;
-    case DBGt_FAIL: pfx = "\x1b[31mFAIL";   break;
-    case DBGt_ERR:  pfx = "\x1b[31mAAAA";   break;
-    case DBGt_WARN: pfx = "\x1b[33mWARN";   break;
-    default:        pfx = "\x1b[33m\?\?\?\?"; break; // stupid trigraphs v_v
+  if (_ignored.contains(scope)) {
+    return;
   }
 
-  fprintf(stderr, "%s \x1b[37m", pfx);
+  CStr pfx = "";
+  switch (dbgt) {
+    case DBGt_INFO: pfx = "\x1b[34mI"; break;
+    case DBGt_FAIL: pfx = "\x1b[31mF"; break;
+    case DBGt_ERR:  pfx = "\x1b[31mE"; break;
+    case DBGt_WARN: pfx = "\x1b[33mW"; break;
+    default:        pfx = "\x1b[33m?"; break; 
+  }
+
+  fprintf(stderr, "%s \x1b[0m%8s \x1b[37m", pfx, scope);
   vfprintf(stderr, msg, args);
   fprintf(stderr, "\x1b[0m\n");
 }
 
+void Disable(std::set<std::string> scopes)
+{
+  _ignored = scopes;
+}
+
 [[noreturn]]
-void Fail(const char *msg, ...)
+[[gnu::format(printf, 2, 3)]]
+void Fail(const char *scope, const char *msg, ...)
 {
   va_list args;
   va_start(args, msg);
-  XFmtV(DBGt_FAIL, msg, args);
+  XFmtV(DBGt_FAIL, scope, msg, args);
   va_end(args);
   exit(1);
 }
 
-void Err(const char *msg, ...)
+[[gnu::format(printf, 2, 3)]]
+void Err(const char *scope, const char *msg, ...)
 {
   va_list args;
   va_start(args, msg);
-  XFmtV(DBGt_ERR, msg, args);
+  XFmtV(DBGt_ERR, scope, msg, args);
   va_end(args);
 }
 
-void Warn(const char *msg, ...)
+[[gnu::format(printf, 2, 3)]]
+void Warn(const char *scope, const char *msg, ...)
 {
   va_list args;
   va_start(args, msg);
-  XFmtV(DBGt_WARN, msg, args);
+  XFmtV(DBGt_WARN, scope, msg, args);
   va_end(args);
 }
 
-void Info(const char *msg, ...)
+[[gnu::format(printf, 2, 3)]]
+void Info(const char *scope, const char *msg, ...)
 {
   va_list args;
   va_start(args, msg);
-  XFmtV(DBGt_INFO, msg, args);
+  XFmtV(DBGt_INFO, scope, msg, args);
   va_end(args);
 }
 

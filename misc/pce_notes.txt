@@ -1,6 +1,6 @@
 Resources ----------------------------------------------------------------------
 
-PCEtech by Charles MacDonald
+PCEtech.txt by Charles MacDonald (He asked to not link the document)
 
 CPU manual
 https://dn790004.ca.archive.org/0/items/PCEDev/HuC6280%20-%20CMOS%208-bit%20Microprocessor%20Software%20Manual.pdf
@@ -10,6 +10,9 @@ https://computer.fandom.com/wiki/Hudson_Soft_HuC6280
 
 HuC6280 opcode table
 https://www.chrismcovell.com/PCEdev/HuC6280_opcodes.html
+
+VDC register stuff that's not in PCEtech.txt
+http://www.magicengine.com/mkit/doc_hard_vdc.html
 
 Notes --------------------------------------------------------------------------
 
