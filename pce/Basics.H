@@ -2,6 +2,9 @@
 #pragma once
 
 #include <cstdint>
+#ifdef _MSC_VER
+#include <intrin.h>
+#endif
 #define defexpr static constexpr
 
 using U0   = void;
@@ -43,3 +46,6 @@ struct MirroredMem : public MemRange
     MemRange(_from, _to), mirror_every(_mirror_every) {}
   constexpr auto Get(Uxx addr) const -> Uxx {return (addr-from)%mirror_every;}
 };
+
+int PopCnt32(U32 v);
+int Ctz32(U32 v);

@@ -210,9 +210,10 @@ static int16_t read_sample(struct apu *apu)
     if (apu->pulse1.length != 0 && !apu->pulse1.sweep_lock)
     {
         uint8_t volume = apu->pulse1.envl_constant ? apu->pulse1.envl_volume_or_period : apu->pulse1.decay;
-        pulse1 = duty_get_cycle(apu->pulse1.duty, apu->pulse1.duty_cycle) * volume;
+        pulse1 = duty_get_cycle(apu->pulse1.duty, apu->pulse1.duty_cycle) * 255;//volume;
     }
     
+    /*
     uint8_t pulse2 = 0;
     
     if (apu->pulse2.length != 0 && !apu->pulse2.sweep_lock)
@@ -249,8 +250,9 @@ static int16_t read_sample(struct apu *apu)
     if (value < -1.0) value = -1.0;
 
     int sample = value * 32766;
+    */
 
-    return sample;
+    return (((int16_t)pulse1)-128)*255;
 }
 
 static void pulse_envelope_cycle(struct apu_pulse_chan *pulse)

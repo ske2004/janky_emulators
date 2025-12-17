@@ -1,0 +1,16 @@
+{
+	"folders":
+	[
+		{
+			"path": "."
+		},
+	],
+	"build_systems":
+  [
+    {
+      "name": "BuildPCE",
+      "working_dir": "$project_path\\build",
+      "shell_cmd": "ninja && pcpow"
+    }
+  ]
+}

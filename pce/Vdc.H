@@ -2,6 +2,47 @@
 
 #include "Basics.H"
 #include "Dbg.H"
+#include "PceOut.H"
+#include "Vce.H"
+#include "Vram.H"
+#include "Irq.H"
+
+namespace _vdc {
+  static const char *adr_names[] = {
+    "REG_SEL",
+    "UNUSED0",
+    "DATA_LO",
+    "DATA_HI",
+  };
+
+  static const char *reg_names[] = {
+    "MAWR",
+    "MARR",
+    "VRW",
+    "UNUSED0",
+    "UNUSED1",
+    "CR",
+    "RCR",
+    "SCROLLX",
+    "SCROLLY",
+    "MWR",
+    "HSYNC",
+    "HDISP",
+    "VSYNC",
+    "VDISP",
+    "VEND",
+    "DMACTRL",
+    "DMASRC",
+    "DMADST",
+    "DMALEN",
+    "DMASPR",
+  };
+}
+
+static auto PiecewiseWrite16(U16 &dest, U8 value, Bool lo) -> void
+{
+  dest = lo ? ((dest & 0xFF00) | value) : ((dest & 0xFF) | (U16)value << 8);
+}
 
 struct Vdc
 {
@@ -17,7 +58,22 @@ struct Vdc
     SCROLLX,
     SCROLLY,
     MWR    , /* memory width register */
-    HDR    ,
+    HSYNC  ,
+    HDISP  ,
+    VSYNC  ,
+    VDISP  ,
+    VEND   ,
+    DMACTRL,
+    DMASRC ,
+    DMADST ,
+    DMALEN ,
+    DMASPR ,
+    _COUNT
+  };
+
+  enum class Latch
+  {
+    
   };
 
   enum class Adr
@@ -28,77 +84,31 @@ struct Vdc
     DATA_HI,
   };
 
-  U8 selected_register {};
+  U8 selected_register = 0;
 
-  struct {
-    U16 cr;
-    U16 rcr;
-    U16 scrollx;
-    U16 scrolly;
-    U16 mwr;
-  } regs {};
+  U8 rwmode = 0; /* 0 = r ; 1 = w */
+  U16 addr = 0;
 
-  auto GetRegPtr(Reg reg, Bool hi) -> U8*
-  {
-    /* won't work on big endian but whatever */
-    switch (reg) {
-    case Reg::CR:      return &((uint8_t*)(&regs.cr))[hi]; break;
-    case Reg::RCR:     return &((uint8_t*)(&regs.rcr))[hi]; break;
-    case Reg::SCROLLX: return &((uint8_t*)(&regs.scrollx))[hi]; break;
-    case Reg::SCROLLY: return &((uint8_t*)(&regs.scrolly))[hi]; break;
-    case Reg::MWR:     return &((uint8_t*)(&regs.mwr))[hi]; break;
-    default: Dbg::Err("VDC/GRP", "failed"); break;
-    }
+  Vce &vce;
+  Vce::Color screen[256*224];
 
-    return nullptr;
-  }
+  U16 x=0, y=0;
+  PceOut &out;
 
-  auto Write(Adr adr, U8 data) -> void
-  {
-    switch (adr) {
-    case Adr::REG_SEL:
-      Dbg::Info("VDC/W", "WR REG_SEL: $%02X", data);
-      selected_register = data&0x1F; /* mask out last 5 bits */
-      break;
-    case Adr::UNUSED0:
-      break;
-    case Adr::DATA_LO:
-    case Adr::DATA_HI:
-      {
-        U8 *ptr = GetRegPtr(Reg(selected_register), adr==Adr::DATA_HI);
-        if (ptr) {
-          Dbg::Info("VDC/W", "REG %d (+%d): $%02X", selected_register, adr==Adr::DATA_HI, data);
-          *ptr = data;
-        } else {
-          Dbg::Err("VDC/W", "REG %d (+%d): $%02X FAILED", selected_register, adr==Adr::DATA_HI, data);
-        }
-      }
-      break;
-    default:
-      Dbg::Info("VDC/W", "unhandled %d", adr);
-      break;
-    }
-  }
+  U16 satb_dma = 0;
+  Bool satb_dma_next_vblank = false;
 
-  auto Read(Adr adr) -> U8
-  {
-    switch (adr) {
-    case Adr::REG_SEL: return 0; break; /* TODO: VDC status */
-    case Adr::UNUSED0: return 0; break;
-    case Adr::DATA_LO:
-    case Adr::DATA_HI:
-      {
-        U8 *ptr = GetRegPtr(Reg(selected_register), adr==Adr::DATA_HI);
-        if (ptr) {
-          Dbg::Info("VDC/R", "REG %d (+%d): $%02X", selected_register, adr==Adr::DATA_HI, *ptr);
-          return *ptr;
-        } else {
-          Dbg::Err("VDC/R", "REG %d (+%d): FAILED", selected_register, adr==Adr::DATA_HI);
-        }
-      }
-      break;
-    default: Dbg::Info("VDC/R", "unhandled %d", adr); break;
-    }
-    return 0xFF;
-  }
+  Vram vram {};
+
+  Irq &irq;
+
+  Vdc(Vce &vce, PceOut &out, Irq &irq) : vce(vce), out(out), irq(irq) {}
+
+  void PlotDot(int x, int y, Vce::Color value);
+  // not how it works
+  void FillScreen();
+  auto Cycle() -> U0;
+  auto RegWrite(Reg reg, U8 data, Bool lo) -> void;
+  auto Write(Adr adr, U8 data) -> void;
+  auto Read(Adr adr) -> U8;
 };

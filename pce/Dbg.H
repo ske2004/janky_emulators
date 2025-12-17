@@ -12,50 +12,53 @@
 #define DBGt_FAIL  1 // fatal error
 #define DBGt_ERR   2 // error
 #define DBGt_WARN  3 // warning
+#define DBGt_TODO  4 // todo
 
 namespace Dbg
 {
 
-std::set<std::string> _ignored;
+extern std::set<std::string> _ignored;
 
-void XFmtV(U64 dbgt, const char *scope, const char *msg, va_list args)
+static void XFmtV(U64 dbgt, const char *scope, const char *msg, va_list args)
 {
-  if (_ignored.contains(scope)) {
+  if (_ignored.contains(scope) && dbgt != DBGt_FAIL) {
     return;
   }
 
   CStr pfx = "";
   switch (dbgt) {
-    case DBGt_INFO: pfx = "\x1b[34mI"; break;
-    case DBGt_FAIL: pfx = "\x1b[31mF"; break;
-    case DBGt_ERR:  pfx = "\x1b[31mE"; break;
-    case DBGt_WARN: pfx = "\x1b[33mW"; break;
-    default:        pfx = "\x1b[33m?"; break; 
+    case DBGt_INFO: pfx = "I"; break;
+    case DBGt_FAIL: pfx = "F"; break;
+    case DBGt_ERR:  pfx = "E"; break;
+    case DBGt_WARN: pfx = "W"; break;
+    case DBGt_TODO: pfx = "T"; break;
+    default:        pfx = "?"; break;
   }
 
-  fprintf(stderr, "%s \x1b[0m%8s \x1b[37m", pfx, scope);
+  fprintf(stderr, "%s %8s ", pfx, scope);
   vfprintf(stderr, msg, args);
-  fprintf(stderr, "\x1b[0m\n");
+  fprintf(stderr, "\n");
 }
 
-void Disable(std::set<std::string> scopes)
+static void Disable(std::set<std::string> scopes)
 {
   _ignored = scopes;
 }
 
 [[noreturn]]
 [[gnu::format(printf, 2, 3)]]
-void Fail(const char *scope, const char *msg, ...)
+static void Fail(const char *scope, const char *msg, ...)
 {
   va_list args;
   va_start(args, msg);
   XFmtV(DBGt_FAIL, scope, msg, args);
   va_end(args);
+  fflush(stderr);
   exit(1);
 }
 
 [[gnu::format(printf, 2, 3)]]
-void Err(const char *scope, const char *msg, ...)
+static void Err(const char *scope, const char *msg, ...)
 {
   va_list args;
   va_start(args, msg);
@@ -64,7 +67,7 @@ void Err(const char *scope, const char *msg, ...)
 }
 
 [[gnu::format(printf, 2, 3)]]
-void Warn(const char *scope, const char *msg, ...)
+static void Warn(const char *scope, const char *msg, ...)
 {
   va_list args;
   va_start(args, msg);
@@ -73,11 +76,20 @@ void Warn(const char *scope, const char *msg, ...)
 }
 
 [[gnu::format(printf, 2, 3)]]
-void Info(const char *scope, const char *msg, ...)
+static void Info(const char *scope, const char *msg, ...)
 {
   va_list args;
   va_start(args, msg);
   XFmtV(DBGt_INFO, scope, msg, args);
+  va_end(args);
+}
+
+[[gnu::format(printf, 2, 3)]]
+static void Todo(const char *scope, const char *msg, ...)
+{
+  va_list args;
+  va_start(args, msg);
+  XFmtV(DBGt_TODO, scope, msg, args);
   va_end(args);
 }
 

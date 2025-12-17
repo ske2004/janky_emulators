@@ -15,10 +15,9 @@ struct Clk
   ClkAuxCycle aux_cycle; // aux cycle fn for simpler than CPU
 
   Clk(ClkAuxCycle aux_cycle) : aux_cycle(aux_cycle) {}
-  auto Ignore(std::function<void()> cb)->void { ignoring=true; cb(); ignoring=false; }
-  auto Halt()->void { halted = true; }
-  auto ExtraCycle()->void { if (!ignoring) {extra_counter++; counter++; aux_cycle();} }
-  auto Cycle()->void { if (!ignoring) {counter++; aux_cycle();} }
-  auto IsGoing()->Bool { return !halted; }
+  auto Ignore(std::function<void()> cb)->void;
+  auto Halt()->void;
+  auto ExtraCycle()->void;
+  auto Cycle()->void;
+  auto IsGoing()->Bool;
 };
-

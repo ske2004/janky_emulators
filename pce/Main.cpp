@@ -5,7 +5,7 @@
 class PcPow : public olc::PixelGameEngine
 {
   PceBin bin;
-  PceOut out;
+  PceOut out { };
   std::thread pce_thread;
 
 public:
@@ -23,8 +23,8 @@ public:
   Bool OnUserCreate() override
   {
     pce_thread = std::thread([this]{
-      Pce pce(bin);
-      pce.Run(out);
+      Pce pce(bin, out);
+      pce.Run();
     });
 
     return true;
@@ -44,6 +44,15 @@ public:
       }
     }
 
+    char buf[32];
+    sprintf(buf, "%d", (int)out.frame);
+
+    this->DrawString({0, 0}, buf);
+
+    if (GetKey(olc::Key::ESCAPE).bPressed) {
+      return false;
+    }
+
     return true;
   }
 };
@@ -56,8 +65,12 @@ auto main(I32 argc, CStr argv[]) -> I32
   }
 
   Dbg::Disable({
+    "CPU/A",
+    "CPU/T",
+    "VDC/R",
+    "VDC/W",
     "CPU/I",
-    "CPU/A"
+    "VCE/W",
   });
 
   Dbg::Info("MAIN", "Loading ROM %s", argv[1]);

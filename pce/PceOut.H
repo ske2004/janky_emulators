@@ -1,3 +1,4 @@
+#pragma once
 #include <mutex>
 #include "Basics.H"
 
@@ -6,6 +7,10 @@
 
 struct PceOut
 {
+  Uxx frame;
   std::mutex mux;
   U32 screen[PCE_SCREEN_H*PCE_SCREEN_W];
+
+  auto NextFrame() -> U0;
+  auto SetRGB16(U16 data[]) -> U0;
 };
