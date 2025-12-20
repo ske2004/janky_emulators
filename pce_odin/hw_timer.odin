@@ -23,17 +23,15 @@ timer_write :: proc(bus: ^Bus, using timer: ^Timer, addr: TimerAddrs, val: u8) {
 }
 
 timer_cycle :: proc(bus: ^Bus, using timer: ^Timer) {
-  if bus.clocks % 3 == 0 {
-    clocks += 1
-    
-    if clocks%1024 == 0 {
-      if enabled {
-        if counter == 0 {
-          counter = reload+1
-          bus_irq(bus, .Timer)
-        } else {
-          counter -= 1
-        }
+  clocks += 1
+  
+  if clocks%1024 == 0 {
+    if enabled {
+      if counter == 0 {
+        counter = reload+1
+        bus_irq(bus, .Timer)
+      } else {
+        counter -= 1
       }
     }
   }

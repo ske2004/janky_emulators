@@ -47,11 +47,18 @@ Cpu :: struct {
 }
 
 BANK_START :: 7
-BANK_MASK :: 0x1FFF
+BANK_MASK  :: 0x1FFF
 BANK_SHIFT :: 13
 
 ZPG_START :: 0x2000
 STK_START :: 0x2100
+
+IRQ2_START  :: 0xFFF6
+IRQ1_START  :: 0xFFF8
+TIMER_START :: 0xFFFA
+NMI_START   :: 0xFFFC
+RESET_START :: 0xFFFE
+
 
 @(no_instrumentation=true) 
 bank_sel :: #force_inline proc(bank: u16) -> u16 {
@@ -73,9 +80,12 @@ cpu_mem_map :: #force_inline proc(cpu: ^Cpu, addr: u16) -> u32 {
 @(no_instrumentation=true) 
 cpu_cycle :: #force_inline proc(cpu: ^Cpu) {
   if cpu.fast {
-    for i in 0..<3 do bus_cycle(cpu.bus)
+    bus_cycle(cpu.bus)
   } else {
-    for i in 0..<12 do bus_cycle(cpu.bus)
+    bus_cycle(cpu.bus)
+    bus_cycle(cpu.bus)
+    bus_cycle(cpu.bus)
+    bus_cycle(cpu.bus)
   }
 }
 
@@ -101,65 +111,65 @@ cpu_write_u8 :: #force_inline proc(cpu: ^Cpu, addr: u16, val: u8) {
   cpu_cycle(cpu)
 }
 
-cpu_read_pc_u8 :: proc(cpu: ^Cpu) -> u8 {
+cpu_read_pc_u8 :: #force_inline proc(cpu: ^Cpu) -> u8 {
   value := bus_read_u8(cpu.bus, cpu_mem_map(cpu, cpu.pc))
   cpu_cycle(cpu)
   cpu.pc += 1
   return value
 }
 
-cpu_stk_push_u8 :: proc(cpu: ^Cpu, val: u8) {
+cpu_stk_push_u8 :: #force_inline proc(cpu: ^Cpu, val: u8) {
   cpu_read_u8(cpu, STK_START|cast(u16)cpu.sp) // dummy
   cpu_write_u8(cpu, STK_START|cast(u16)cpu.sp, val)
   cpu.sp -= 1
 }
 
-cpu_stk_push_u16 :: proc(cpu: ^Cpu, val: u16) {
+cpu_stk_push_u16 :: #force_inline proc(cpu: ^Cpu, val: u16) {
   cpu_stk_push_u8(cpu, cast(u8)(val>>8))
   cpu_stk_push_u8(cpu, cast(u8)(val&0xFF))
 }
 
-cpu_stk_write_u8 :: proc(cpu: ^Cpu, val: u8) {
+cpu_stk_write_u8 :: #force_inline proc(cpu: ^Cpu, val: u8) {
   // todo: do i need dummy here?
   cpu_write_u8(cpu, STK_START|cast(u16)cpu.sp, val)
 }
 
-cpu_stk_pop_u8 :: proc(cpu: ^Cpu) -> u8 {
+cpu_stk_pop_u8 :: #force_inline proc(cpu: ^Cpu) -> u8 {
   cpu.sp += 1
   // and here??
   cpu_read_u8(cpu, STK_START|cast(u16)cpu.sp) // dummy
   return cpu_read_u8(cpu, STK_START|cast(u16)cpu.sp)
 }
 
-cpu_stk_pop_u16 :: proc(cpu: ^Cpu) -> u16 {
+cpu_stk_pop_u16 :: #force_inline proc(cpu: ^Cpu) -> u16 {
   lo := cast(u16)cpu_stk_pop_u8(cpu)
   hi := cast(u16)cpu_stk_pop_u8(cpu)
   return (hi << 8) | lo
 }
 
-cpu_stk_read_u8 :: proc(cpu: ^Cpu) -> u8 {
+cpu_stk_read_u8 :: #force_inline proc(cpu: ^Cpu) -> u8 {
   // and here??
   return cpu_read_u8(cpu, STK_START|cast(u16)cpu.sp)
 }
 
-cpu_dummy_read :: proc(cpu: ^Cpu) {
+cpu_dummy_read :: #force_inline proc(cpu: ^Cpu) {
   cpu_read_u8(cpu, cpu.pc)
 }
 
-cpu_read_pc_u16 :: proc(cpu: ^Cpu) -> u16 {
+cpu_read_pc_u16 :: #force_inline proc(cpu: ^Cpu) -> u16 {
   lo := cast(u16)bus_read_u8(cpu.bus, cpu_mem_map(cpu, cpu.pc))
   hi := cast(u16)bus_read_u8(cpu.bus, cpu_mem_map(cpu, cpu.pc+1))
   cpu.pc += 2
   return (hi << 8) | lo
 }
 
-cpu_set_nz :: proc(cpu: ^Cpu, value: u8) {
+cpu_set_nz :: #force_inline proc(cpu: ^Cpu, value: u8) {
   cpu.p.neg = (transmute(i8)value) < 0
   cpu.p.zer = value == 0
 }
 
 @(no_instrumentation) 
-update_block_transfer_reg :: proc(reg: ^BlockTransferReg) {
+update_block_transfer_reg :: #force_inline proc(reg: ^BlockTransferReg) {
   switch reg.op {
     case .NONE:
     case .INC: reg.value += 1
@@ -206,6 +216,32 @@ block_transfer :: proc(cpu: ^Cpu, srcop, dstop: BlockTransferOp) {
   cyc_notran := cyc_total-cyc_tran+1; // account for opc cycle
 
   log_instr_info("BLK: cyctot:%d, cyctrn:%d, cycntr:%d", cyc_total, cyc_tran, cyc_notran)
+}
+
+cpu_enter_irq :: proc(cpu: ^Cpu, addr: u16) {
+  cpu_stk_push_u16(cpu, cpu.pc)
+  cpu_stk_push_u8(cpu, cast(u8)cpu.p)
+
+  cpu.p.int = true
+
+  cpu.pc = addr
+}
+
+cpu_check_irq :: proc(cpu: ^Cpu) {
+  if cpu.p.int == false {
+    if cpu.bus.irq_pending.irq2 && !cpu.bus.irq_disable.irq2 {
+      cpu.bus.irq_pending.irq2 = false
+      cpu_enter_irq(cpu, cpu_read_u16(cpu, IRQ2_START))
+    } else if cpu.bus.irq_pending.irq1 && !cpu.bus.irq_disable.irq1 {
+      cpu.bus.irq_pending.irq1 = false
+      log_instr_info("intercepting vblank")
+      cpu_enter_irq(cpu, cpu_read_u16(cpu, IRQ1_START))
+    } else if cpu.bus.irq_pending.timer && !cpu.bus.irq_disable.timer {
+      log_instr_info("intercepting timer irq")
+      cpu.bus.irq_pending.timer= false
+      cpu_enter_irq(cpu, cpu_read_u16(cpu, TIMER_START))
+    }
+  }
 }
 
 cpu_init :: proc(bus: ^Bus) -> Cpu {

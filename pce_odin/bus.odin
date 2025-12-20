@@ -20,7 +20,7 @@ Bus :: struct {
   clocks: uint,
 
   irq_pending: IrqReg,
-  irq_enable: IrqReg,
+  irq_disable: IrqReg,
 
   io_byte: u8,
 
@@ -67,14 +67,14 @@ bus_write_u8 :: proc(bus: ^Bus, addr: u32, value: u8) {
 }
 
 bus_cycle :: proc(bus: ^Bus) {
-  bus.clocks += 1
+  bus.clocks += 3
   timer_cycle(bus, &bus.timer)
   vdc_cycle(bus, &bus.vdc)
 }
 
 bus_irq :: proc(bus: ^Bus, irq: Irq) {
   bit := cast(u8)1<<irq
-  if (cast(u8)bus.irq_enable & bit) > 0 {
+  if (cast(u8)bus.irq_disable & bit) == 0 {
     bus.irq_pending |= transmute(IrqReg)bit
   }
 }

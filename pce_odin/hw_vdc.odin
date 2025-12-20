@@ -2,28 +2,29 @@ package main
 
 import "core:log"
 import "core:mem"
+import "core:fmt"
 
 VdcReg :: enum {
-  Mawr   , // VDC memory write
-  Marr   , // VDC memory read
-  Vrw    , // VRAM read/write
-  Unused0,
-  Unused1,
-  Cr     , // control register
-  Rcr    , // raster compare register
-  Scrollx,
-  Scrolly,
-  Mwr    , // memory width register
-  Hsync  ,
-  Hdisp  ,
-  Vsync  ,
-  Vdisp  ,
-  Vend   ,
-  Dmactrl,
-  Dmasrc ,
-  Dmadst ,
-  Dmalen ,
-  Dmaspr ,
+  Mawr    = 0x00, // VDC memory write
+  Marr    = 0x01, // VDC memory read
+  Vrw     = 0x02, // VRAM read/write
+  Unused0 = 0x03,
+  Unused1 = 0x04,
+  Cr      = 0x05, // control register
+  Rcr     = 0x06, // raster compare register
+  Scrollx = 0x07,
+  Scrolly = 0x08,
+  Mwr     = 0x09, // memory width register
+  Hsync   = 0x0A,
+  Hdisp   = 0x0B,
+  Vsync   = 0x0C,
+  Vdisp   = 0x0D,
+  Vend    = 0x0E,
+  Dmactrl = 0x0F,
+  Dmasrc  = 0x10,
+  Dmadst  = 0x11,
+  Dmalen  = 0x12,
+  Dmaspr  = 0x13,
 }
 
 VramSpriteFlags :: bit_field u16 {
@@ -129,13 +130,13 @@ vdc_rw_increment :: proc(vdc: ^Vdc) -> u16 {
   return 1 << (vdc.cr.rw_increment + 4)
 }
 
-vdc_write_reg :: proc(vdc: ^Vdc, reg: VdcReg, val: u16) {
-  log_instr_info("vdc write reg: %v %04X", reg, val)
+vdc_write_reg :: proc(vdc: ^Vdc, reg: VdcReg, val: u16, no_sideffect: bool) {
+  log_instr_info("vdc write reg: %v %04X (%s)", reg, val, no_sideffect ? "low" : "high")
 
   switch reg {
   case .Mawr: vdc.mawr = val&0x7FFF
   case .Marr: vdc.marr = val&0x7FFF
-  case .Vrw:  vdc.vram.vram[vdc.mawr] = val; vdc.mawr += vdc_rw_increment(vdc); vdc.mawr &= 0x7FFF
+  case .Vrw: panic("vrw write is special")
   case .Unused0, .Unused1:
   case .Cr:   vdc.cr = cast(VdcCr)val; log.warnf("todo: vdc cr")
   case .Rcr:  vdc.rcr = val&0x1FF
@@ -148,15 +149,17 @@ vdc_write_reg :: proc(vdc: ^Vdc, reg: VdcReg, val: u16) {
   case .Dmasrc: vdc.dmasrc = val
   case .Dmadst: vdc.dmadst = val
   case .Dmalen: vdc.dmalen = val
-  case .Dmaspr: vdc.dmaspr = val; vdc.satb_dma_next_vblank = true
+  case .Dmaspr: vdc.dmaspr = val; vdc.satb_dma_next_vblank = true;
   }
 }
 
-vdc_read_reg :: proc(vdc: ^Vdc, reg: VdcReg, low: bool) -> (ret: u16) {
+vdc_read_reg :: proc(vdc: ^Vdc, reg: VdcReg, no_sideffect: bool, no_log: bool = false) -> (ret: u16) {
   switch reg {
   case .Mawr: ret = vdc.mawr
   case .Marr: ret = vdc.marr
-  case .Vrw:  ret = vdc.vram.vram[vdc.marr]; if !low { vdc.marr += vdc_rw_increment(vdc); vdc.marr &= 0x7FFF }
+  case .Vrw:
+    ret = vdc.vram.vram[vdc.marr]
+    if !no_sideffect { vdc.marr += vdc_rw_increment(vdc); vdc.marr &= 0x7FFF }
   case .Unused0, .Unused1:
   case .Cr:   ret = cast(u16)vdc.cr; log.warnf("todo: vdc cr")
   case .Rcr:  ret = vdc.rcr
@@ -171,8 +174,11 @@ vdc_read_reg :: proc(vdc: ^Vdc, reg: VdcReg, low: bool) -> (ret: u16) {
   case .Dmalen:  ret = vdc.dmalen
   case .Dmaspr:  ret = vdc.dmaspr
   }
-  
-  log_instr_info("vdc read reg: %v %04X", reg, ret)
+    
+
+  if !no_log {
+    log_instr_info("vdc read reg: %v %04X (%s)", reg, ret, no_sideffect ? "low" : "high")
+  }
 
   return
 }
@@ -185,7 +191,7 @@ plot_dot :: proc(bus: ^Bus, x, y: int, color: Rgb333) {
 
 vdc_fill :: proc(bus: ^Bus, using vdc: ^Vdc) {
   bus.screen = {}
-  
+
   if satb_dma_next_vblank || dmactrl.satb_dma_auto {
     // TODO: what if it overflows vram addr?
     mem.copy(&vram.satb, &vram.vram[dmaspr], size_of(vram.satb))
@@ -206,20 +212,21 @@ vdc_fill :: proc(bus: ^Bus, using vdc: ^Vdc) {
 }
 
 vdc_cycle :: proc(bus: ^Bus, using vdc: ^Vdc) {
-  x += 1
+  x += 3
   if x == 342 {
     x = 0
     y += 1
     if y == 263 {
       y = 0
+      vdc_fill(bus, vdc)
       bus.vblank_occured = true
     }
   }
 
-  if (x == 0 && y == 258) {
+  if (x == 0 && y == 258 && vdc.cr.vblank_int) {
     log_instr_info("vblank!")
+    vdc.status.vblank_happen = true
     bus_irq(bus, .Irq1)
-    vdc_fill(bus, vdc)
   }
 }
 
@@ -227,8 +234,21 @@ vdc_write :: proc(bus: ^Bus, vdc: ^Vdc, addr: VdcAddrs, val: u8) {
   switch addr {
   case .Ctrl: vdc.reg_selected = cast(VdcReg)(val & 0x1F); if val > 19 do log.warnf("invalid reg selected %d", val)
   case .Unknown1:
-  case .Data_lo: vdc.w_buf = cast(u16)val
-  case .Data_hi: vdc_write_reg(vdc, vdc.reg_selected, vdc.w_buf | (cast(u16)val << 8))
+  case .Data_lo:
+    if vdc.reg_selected == .Vrw {
+      vdc.vram.vram[vdc.mawr] = (vdc.vram.vram[vdc.mawr]&0xFF00) | cast(u16)val
+    } else {
+      vdc_write_reg(vdc, vdc.reg_selected, (vdc_read_reg(vdc, vdc.reg_selected, true, no_log=true)&0xFF00)|cast(u16)val, true)
+    }
+  case .Data_hi:
+    if vdc.reg_selected == .Vrw {
+      vdc.vram.vram[vdc.mawr] = (vdc.vram.vram[vdc.mawr]&0x00FF) | cast(u16)val<<8
+      log_instr_info("vdc vrw write: %04X", vdc.vram.vram[vdc.mawr])
+      vdc.mawr += vdc_rw_increment(vdc)
+      vdc.mawr &= 0x7FFF
+    } else {
+      vdc_write_reg(vdc, vdc.reg_selected, (vdc_read_reg(vdc, vdc.reg_selected, true, no_log=true)&0xFF)|(cast(u16)val << 8), false)
+    }
   }
 }
 

@@ -1,6 +1,7 @@
 package main
 
 import "core:log"
+import "core:fmt"
 
 VdcAddrs :: enum {
   Ctrl     = 0,
@@ -10,14 +11,14 @@ VdcAddrs :: enum {
 }
 
 VceAddrs :: enum {
-  Ctrl = 0,
+  Ctrl_lo = 0,
+  Ctrl_hi = 1,
   /* 9 bits PPPPPPPPP */
-  PalSelect_lo = 1,
-  PalSelect_hi = 2,
+  PalSelect_lo = 2,
+  PalSelect_hi = 3,
   /* 9 bits GGGRRRBBB */
-  PalColor_lo = 3,
-  PalColor_hi = 4,
-  Unknown5 = 5,
+  PalColor_lo = 4,
+  PalColor_hi = 5,
   Unknown6 = 6,
   Unknown7 = 7,
 }
@@ -63,13 +64,13 @@ hwpage_map :: #force_inline proc(addr: u16) -> HwpageDst {
 
 hwpage_read :: proc(bus: ^Bus, addr: u16) -> u8 {
   switch v in hwpage_map(addr) {
-    case VdcAddrs:   return vdc_read(bus, &bus.vdc, v)
-    case VceAddrs:   return vce_read(&bus.vce, v)
-    case PsgAddrs:   unimplemented("read psgaddrs")
-    case TimerAddrs: return timer_read(bus, &bus.timer, v)
-    case IoAddrs:    unimplemented("read ioaddrs")
-    case IctlAddrs:  return ictl_read(bus, v)
-    case nil:        return 0xFF
+  case VdcAddrs:   return vdc_read(bus, &bus.vdc, v)
+  case VceAddrs:   return vce_read(&bus.vce, v)
+  case PsgAddrs:   log.warnf("psg read: %04X", addr)
+  case TimerAddrs: return timer_read(bus, &bus.timer, v)
+  case IoAddrs:    log.warnf("joypad read"); return 0
+  case IctlAddrs:  return ictl_read(bus, v)
+  case nil:        return 0xFF
   }
   unreachable()
 }
@@ -80,12 +81,12 @@ hwpage_write :: proc(bus: ^Bus, addr: u16, val: u8) {
   }
 
   switch v in hwpage_map(addr) {
-    case VdcAddrs:   vdc_write(bus, &bus.vdc, v, val)
-    case VceAddrs:   vce_write(&bus.vce, v, val)
-    case PsgAddrs:   unimplemented("write psgaddrs")
-    case TimerAddrs: timer_write(bus, &bus.timer, v, val)
-    case IoAddrs:    unimplemented("write ioaddrs")
-    case IctlAddrs:  ictl_write(bus, v, val)
-    case nil:        return
+  case VdcAddrs:   vdc_write(bus, &bus.vdc, v, val)
+  case VceAddrs:   vce_write(&bus.vce, v, val)
+  case PsgAddrs:   log.warnf("psg write: %04X %02X", addr, val)
+  case TimerAddrs: timer_write(bus, &bus.timer, v, val)
+  case IoAddrs:    log.warnf("joypad write")
+  case IctlAddrs:  ictl_write(bus, v, val)
+  case nil:        return
   }
 }

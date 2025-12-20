@@ -2,6 +2,7 @@ package main
 
 import "core:os"
 import "core:log"
+import "core:time"
 import "core:fmt"
 import "core:mem"
 import "base:runtime"
@@ -82,12 +83,19 @@ main :: proc() {
     raylib.ImageFormat(&screen, .UNCOMPRESSED_R8G8B8A8)
     defer raylib.UnloadImage(screen)
 
+    frame := 0
+
     for !raylib.WindowShouldClose() {
-      raylib.BeginDrawing()
-      raylib.EndDrawing()
+      defer frame += 1
+
+      start := time.now()
       for !bus.vblank_occured {
         cpu_exec_instr(&cpu)
       }
+      bus.vblank_occured = false
+      diff := time.now()._nsec - start._nsec
+
+      raylib.BeginDrawing()
 
       pixels := cast([^]u8)screen.data
       pixels_i := 0
@@ -96,13 +104,15 @@ main :: proc() {
         pixels[i*4+0] = cast(u8)v.r*32
         pixels[i*4+1] = cast(u8)v.g*32
         pixels[i*4+2] = cast(u8)v.b*32
-        pixels[i*4+2] = 0xFF
+        pixels[i*4+3] = 0xFF
       }
 
       texture := raylib.LoadTextureFromImage(screen)
       defer raylib.UnloadTexture(texture)
 
       raylib.DrawTextureRec(texture, {0, 0, 256, 224}, {0, 0}, raylib.WHITE)
+      raylib.DrawText(fmt.caprintf("FRAME: %v\nTIME: %v", frame, diff, allocator = context.temp_allocator), 0, 0, 20, raylib.RED) 
+      raylib.EndDrawing()
 
       free_all(context.temp_allocator)
     }

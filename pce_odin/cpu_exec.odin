@@ -4,6 +4,8 @@ import "core:fmt"
 import "base:intrinsics"
 
 cpu_exec_instr :: proc(cpu: ^Cpu) {
+  cpu_check_irq(cpu)
+
   pc_start := cpu.pc
 
   opc := cpu_read_pc_u8(cpu)
@@ -13,12 +15,12 @@ cpu_exec_instr :: proc(cpu: ^Cpu) {
   trace_instr(cpu, opc, pc_start, opc_info, adr)
 
   #partial switch opc_info.instr {
-  case .SEI:
-    cpu_dummy_read(cpu)
-    cpu.p.int = true
   case .CSH:
     cpu_dummy_read(cpu)
     cpu.fast = true
+  case .CSL:
+    cpu_dummy_read(cpu)
+    cpu.fast = false
   case .CLD:
     cpu_dummy_read(cpu)
     cpu.p.dec = false
@@ -37,6 +39,31 @@ cpu_exec_instr :: proc(cpu: ^Cpu) {
     cpu_set_nz(cpu, cpu.a)
   case .LDX:
     cpu.x = adr_mode_read_u8(cpu, adr)
+    log_instr_info("X=%02X", cpu.x, no_log=true)
+    cpu_set_nz(cpu, cpu.x)
+  case .LDY:
+    cpu.y = adr_mode_read_u8(cpu, adr)
+    log_instr_info("Y=%02X", cpu.y, no_log=true)
+    cpu_set_nz(cpu, cpu.y)
+  case .TAY:
+    cpu_dummy_read(cpu)
+    cpu.y = cpu.a
+    cpu_set_nz(cpu, cpu.y)
+  case .TYA:
+    cpu_dummy_read(cpu)
+    cpu.a = cpu.y
+    cpu_set_nz(cpu, cpu.a)
+  case .TAX:
+    cpu_dummy_read(cpu)
+    cpu.x = cpu.a
+    cpu_set_nz(cpu, cpu.x)
+  case .TXA:
+    cpu_dummy_read(cpu)
+    cpu.a = cpu.x
+    cpu_set_nz(cpu, cpu.a)
+  case .TSX:
+    cpu_dummy_read(cpu)
+    cpu.x = cpu.sp
     cpu_set_nz(cpu, cpu.x)
   case .TXS:
     cpu_dummy_read(cpu)
@@ -48,36 +75,39 @@ cpu_exec_instr :: proc(cpu: ^Cpu) {
     log_instr_info("TAM: %02X=%02X", mask, cpu.a)
     for i in 0..<8 {
       if (mask&(1<<u8(i))) > 0 {
-        log_instr_info("TAM: Mapping %04X to page %06X (page: %02X)", i*0x2000, cast(u32)cpu.a<<13, cpu.a)
+        log_instr_info("TAM: Mapping %04X to page %06X (page: %02X)", i*0x2000, cast(u32)cpu.a<<BANK_SHIFT, cpu.a)
         cpu.mpr[i] = cpu.a
       }
     }
-  // case .TDD:
-  //   block_transfer(cpu, srcop=.DEC, dstop=.DEC)
-  // case .TIA:
-  //   block_transfer(cpu, srcop=.INC, dstop=.INCDEC)
-  // case .TIN:
-  //   block_transfer(cpu, srcop=.INC, dstop=.NONE)
+  case .TDD:
+    block_transfer(cpu, srcop=.DEC, dstop=.DEC)
+  case .TIA:
+    block_transfer(cpu, srcop=.INC, dstop=.INCDEC)
+  case .TIN:
+    block_transfer(cpu, srcop=.INC, dstop=.NONE)
   case .TII:
     block_transfer(cpu, srcop=.INC, dstop=.INC)
-  // case .TAI:
-  //   block_transfer(cpu, srcop=.INCDEC, dstop=.INC)
+  case .TAI:
+    block_transfer(cpu, srcop=.INCDEC, dstop=.INC)
   case .JMP:
     dest := adr_mode_read_addr(cpu, adr)
     cpu.pc = dest
   case .JSR:
     dest := adr_mode_read_addr(cpu, adr)
-    cpu.pc += 2
-    cpu_stk_push_u16(cpu, cpu.pc)
-    trace_indent += 1
+    cpu_stk_push_u16(cpu, cpu.pc-1)
     cpu.pc = dest
+    trace_indent += 1
   case .BSR:
-    cpu_stk_push_u16(cpu, cpu.pc)
     dest := adr_mode_read_rel(cpu, adr)
+    cpu_stk_push_u16(cpu, cpu.pc-1)
     cpu.pc += cast(u16)i16(dest)
     trace_indent += 1
   case .STA:
     adr_mode_write_u8(cpu, adr, cpu.a)
+  case .STX:
+    adr_mode_write_u8(cpu, adr, cpu.x)
+  case .STY:
+    adr_mode_write_u8(cpu, adr, cpu.y)
   case .ADC:
     // i dont know any better
     val := adr_mode_read_u8(cpu, adr)
@@ -89,6 +119,8 @@ cpu_exec_instr :: proc(cpu: ^Cpu) {
     cpu.p.car = (calc & 0x0100) > 0
     cpu.p.ovf = ((ovf & 0x80) > 0) ~ cpu.p.car
     cpu.p.zer = result == 0
+
+    cpu.a = cast(u8)result
   case .SBC:
     // i dont know any better
     val := adr_mode_read_u8(cpu, adr)
@@ -100,6 +132,8 @@ cpu_exec_instr :: proc(cpu: ^Cpu) {
     cpu.p.car = (calc & 0x0100) > 0
     cpu.p.ovf = ((ovf & 0x80) > 0) ~ cpu.p.car
     cpu.p.zer = result == 0
+
+    cpu.a = cast(u8)result
   case .RTS:
     cpu_dummy_read(cpu)
     cpu.pc = cpu_stk_pop_u16(cpu)
@@ -111,6 +145,12 @@ cpu_exec_instr :: proc(cpu: ^Cpu) {
     cpu.p.car = ((cast(u16)cpu.a-cast(u16)check)&0xFF00) > 0
     cpu.p.zer = cpu.a==check
     cpu.p.neg = (result&0x80) > 0
+  case .CPX:
+    check := adr_mode_read_u8(cpu, adr)
+    result := cpu.x-check
+    cpu.p.car = ((cast(u16)cpu.x-cast(u16)check)&0xFF00) > 0
+    cpu.p.zer = cpu.x==check
+    cpu.p.neg = (result&0x80) > 0
   case .CPY:
     check := adr_mode_read_u8(cpu, adr)
     result := cpu.y-check
@@ -121,12 +161,22 @@ cpu_exec_instr :: proc(cpu: ^Cpu) {
     if cpu.p.zer do cpu.pc += cast(u16)i16(adr_mode_read_rel(cpu, adr))
   case .BNE:
     if !cpu.p.zer do cpu.pc += cast(u16)i16(adr_mode_read_rel(cpu, adr))
+  case .BMI:
+    if cpu.p.neg do cpu.pc += cast(u16)i16(adr_mode_read_rel(cpu, adr))
   case .BPL:
     if !cpu.p.neg do cpu.pc += cast(u16)i16(adr_mode_read_rel(cpu, adr))
   case .BCS:
     if cpu.p.car do cpu.pc += cast(u16)i16(adr_mode_read_rel(cpu, adr))
+  case .BCC:
+    if !cpu.p.car do cpu.pc += cast(u16)i16(adr_mode_read_rel(cpu, adr))
   case .BRA:
     cpu.pc += cast(u16)i16(adr_mode_read_rel(cpu, adr))
+  case .CLI:
+    cpu_dummy_read(cpu)
+    cpu.p.int = false
+  case .SEI:
+    cpu_dummy_read(cpu)
+    cpu.p.int = true
   case .CLC:
     cpu_dummy_read(cpu)
     cpu.p.car = false
@@ -166,7 +216,7 @@ cpu_exec_instr :: proc(cpu: ^Cpu) {
     }
 
     bit := intrinsics.count_trailing_zeros(mask)
-    log_instr_info("TMA bit %d = %02X", bit, cpu.mpr[bit])
+    log_instr_info("TMA bit %02X %d = %02X", mask, bit, cpu.mpr[bit])
     cpu.a = cpu.mpr[bit]
   case .ST0:
     val := adr_mode_read_u8(cpu, adr)
@@ -180,9 +230,109 @@ cpu_exec_instr :: proc(cpu: ^Cpu) {
   case .RMB:
     val := adr_mode_read_u8(cpu, adr)
     val &= ~(1<<opc_info.extra)
+    adr_mode_write_u8(cpu, adr, val)
   case .SMB:
     val := adr_mode_read_u8(cpu, adr)
     val |= 1<<opc_info.extra
+    adr_mode_write_u8(cpu, adr, val)
+  case .BBR:
+    val := adr_mode_read_u8(cpu, adr)
+    if (val&(1<<opc_info.extra)) == 0 {
+      cpu.pc += cast(u16)i16(adr_mode_read_rel(cpu, adr))
+    }
+  case .BBS:
+    val := adr_mode_read_u8(cpu, adr)
+    if (val&(1<<opc_info.extra)) > 0 {
+      cpu.pc += cast(u16)i16(adr_mode_read_rel(cpu, adr))
+    }
+  case .AND:
+    val := adr_mode_read_u8(cpu, adr)
+    cpu.a &= val
+    cpu_set_nz(cpu, cpu.a)
+  case .EOR:
+    val := adr_mode_read_u8(cpu, adr)
+    cpu.a = val ~ cpu.a
+    cpu_set_nz(cpu, cpu.a)
+  case .ORA:
+    val := adr_mode_read_u8(cpu, adr)
+    cpu.a |= val
+    cpu_set_nz(cpu, cpu.a)
+  case .PHP:
+    cpu_dummy_read(cpu)
+    cpu_stk_push_u8(cpu, cast(u8)cpu.p)
+  case .PLP:
+    cpu_dummy_read(cpu)
+    cpu.p = cast(CpuFlags)cpu_stk_pop_u8(cpu)
+  case .PHA:
+    cpu_dummy_read(cpu)
+    cpu_stk_push_u8(cpu, cpu.a)
+  case .PHX:
+    cpu_dummy_read(cpu)
+    cpu_stk_push_u8(cpu, cpu.x)
+  case .PHY:
+    cpu_dummy_read(cpu)
+    cpu_stk_push_u8(cpu, cpu.y)
+  case .PLA:
+    cpu_dummy_read(cpu)
+    cpu.a = cpu_stk_pop_u8(cpu)
+    cpu_set_nz(cpu, cpu.a)
+  case .PLX:
+    cpu_dummy_read(cpu)
+    cpu.x = cpu_stk_pop_u8(cpu)
+    cpu_set_nz(cpu, cpu.x)
+  case .PLY:
+    cpu_dummy_read(cpu)
+    cpu.y = cpu_stk_pop_u8(cpu)
+    cpu_set_nz(cpu, cpu.y)
+  case .SAX:
+    cpu_dummy_read(cpu)
+    cpu.a, cpu.x = cpu.x, cpu.a
+  case .SAY:
+    cpu_dummy_read(cpu)
+    cpu.a, cpu.y = cpu.y, cpu.a
+  case .SXY:
+    cpu_dummy_read(cpu)
+    cpu.x, cpu.y = cpu.y, cpu.x
+  case .ROL:
+    val := adr_mode_read_u8(cpu, adr) 
+    carry := val & 0x80
+    res := (val << 1) | (carry >> 7)
+    cpu_set_nz(cpu, res)
+    cpu.p.car = carry > 0
+    adr_mode_write_u8(cpu, adr, res)
+  case .ROR:
+    val := adr_mode_read_u8(cpu, adr) 
+    carry := val & 0x1
+    res := (val >> 1) | (carry << 7)
+    cpu_set_nz(cpu, res)
+    cpu.p.car = carry > 0
+    adr_mode_write_u8(cpu, adr, res)
+  case .ASL:
+    val := adr_mode_read_u8(cpu, adr) 
+    carry := val & 0x80
+    res := val << 1
+    cpu_set_nz(cpu, res)
+    cpu.p.car = carry > 0
+    adr_mode_write_u8(cpu, adr, res)
+  case .LSR:
+    val := adr_mode_read_u8(cpu, adr) 
+    carry := val & 0x1
+    res := val >> 1
+    cpu_set_nz(cpu, res)
+    cpu.p.car = carry > 0
+    adr_mode_write_u8(cpu, adr, res)
+  case .NOP:
+    cpu_dummy_read(cpu)
+  case .RTI:
+    cpu.p = cast(CpuFlags)cpu_stk_pop_u8(cpu)
+    cpu.pc = cpu_stk_pop_u16(cpu)
+  case .TST:
+    imm := adr_mode_read_imm(cpu, adr)
+    val := adr_mode_read_u8(cpu, adr)
+    result := imm & val
+    cpu.p.neg = (result & 0x80) > 0
+    cpu.p.ovf = (result & 0x40) > 0
+    cpu.p.zer = result == 0
   case:
     trace_instr(cpu, opc, pc_start, opc_info, adr, stdout = true)
     unimplemented(fmt.aprintf("%02X", opc))
