@@ -13,7 +13,11 @@ format_adr :: proc(cpu: ^Cpu, opc_info: OpcInfo, adr_decoded: AdrDecoded) -> str
       return fmt.aprintf("$%02X", adr_decoded.(AdrImm).val)
     case .Acc:
       return fmt.aprintf("A=$%02X", cpu.a)
-    case .Abs, .Zpg:
+    case .Zpg:
+      return fmt.aprintf("%04X", cast(u16)adr_decoded.(AdrZpg).addr|ZPG_START)
+    case .Zpx:
+      return fmt.aprintf("%04X, X=$%02X", cast(u16)adr_decoded.(AdrZpg).addr|ZPG_START, cast(u16)adr_decoded.(AdrZpg).offs)
+    case .Abs:
       return fmt.aprintf("%04X", adr_decoded.(AdrBasic).addr)
     case .Abx:
       return fmt.aprintf("%04X, X=$%02X", adr_decoded.(AdrBasic).addr, adr_decoded.(AdrBasic).offs)
@@ -22,16 +26,20 @@ format_adr :: proc(cpu: ^Cpu, opc_info: OpcInfo, adr_decoded: AdrDecoded) -> str
     case .Rel:
       return fmt.aprintf("%+d", adr_decoded.(AdrRel).val)
     case .Zpi:
-      return fmt.aprintf("(%04X)", adr_decoded.(AdrIndirect).addr)
+      return fmt.aprintf("(%04X)", adr_decoded.(AdrZpgIndirect).addr)
     case .Zxi:
-      return fmt.aprintf("(%04X, X=$%02X)", adr_decoded.(AdrIndirect).addr, adr_decoded.(AdrIndirect).inner_offs)
+      return fmt.aprintf("(%04X, X=$%02X)", cast(u16)adr_decoded.(AdrZpgIndirect).addr|ZPG_START, adr_decoded.(AdrZpgIndirect).inner_offs)
     case .Ziy:
-      return fmt.aprintf("(%04X), Y=$%02X", adr_decoded.(AdrIndirect).addr, adr_decoded.(AdrIndirect).outer_offs)
+      return fmt.aprintf("(%04X), Y=$%02X", cast(u16)adr_decoded.(AdrZpgIndirect).addr|ZPG_START, adr_decoded.(AdrZpgIndirect).outer_offs)
     case .Zpr:
       return fmt.aprintf("%04X, %+d", adr_decoded.(AdrBasicRel).addr, adr_decoded.(AdrBasicRel).rel)
-    case .Izp, .Iab:
+    case .Izp:
+      return fmt.aprintf("$%02X + %04X", adr_decoded.(AdrImmZpg).imm, cast(u16)adr_decoded.(AdrImmZpg).addr|ZPG_START)
+    case .Iab:
       return fmt.aprintf("$%02X + %04X", adr_decoded.(AdrImmBasic).imm, adr_decoded.(AdrImmBasic).addr)
-    case .Izx, .Iax:
+    case .Izx:
+      return fmt.aprintf("$%02X + %04X, X=%02X", adr_decoded.(AdrImmZpg).imm, cast(u16)adr_decoded.(AdrImmZpg).addr|ZPG_START, adr_decoded.(AdrImmBasic).offs)
+    case .Iax:
       return fmt.aprintf("$%02X + %04X, X=%02X", adr_decoded.(AdrImmBasic).imm, adr_decoded.(AdrImmBasic).addr, adr_decoded.(AdrImmBasic).offs)
     case:
       return "???"
@@ -80,7 +88,7 @@ trace_instr :: proc(cpu: ^Cpu, opc: u8, pc: u16, opc_info: OpcInfo, adr_decoded:
           fmt.fprintf(instr_dbg_file, "  ", flush=false)
         }
       }
-      fmt.fprintf(instr_dbg_file, "%02X %04X %06X %s%s %s\n", opc, pc, cpu_mem_map(cpu, pc), opc_info.instr, extra, t, flush=false)
+      fmt.fprintf(instr_dbg_file, "%02X %04X %06X %s%s %s | A=%02X\n", opc, pc, cpu_mem_map(cpu, pc), opc_info.instr, extra, t, cpu.a, flush=false)
     }
   }
 }

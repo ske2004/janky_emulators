@@ -174,8 +174,8 @@ update_block_transfer_reg :: #force_inline proc(reg: ^BlockTransferReg) {
     case .NONE:
     case .INC: reg.value += 1
     case .DEC: reg.value -= 1
-    case .INCDEC: if reg.state do reg.value -= 1
-                  else do reg.value += 1
+    case .INCDEC: if reg.state { reg.value -= 1 }
+                  else { reg.value += 1 }
                   reg.state = !reg.state
   }
 }
@@ -186,7 +186,7 @@ block_transfer :: proc(cpu: ^Cpu, srcop, dstop: BlockTransferOp) {
   dst := BlockTransferReg{dstop, cpu_read_pc_u16(cpu), false}
   len := cpu_read_pc_u16(cpu)
  
-  log_instr_info("BLK src=%s dst=%s: src:%04X, dst:%04X, len:%04X", srcop, dstop, src.value, dst.value, len);
+  log_instr_info("BLK src=%s dst=%s: src:%04X (%06X), dst:%04X, len:%04X", srcop, dstop, src.value, cpu_mem_map(cpu, src.value), dst.value, len);
 
   cpu_stk_push_u8(cpu, cpu.y)
   cpu_stk_push_u8(cpu, cpu.a)

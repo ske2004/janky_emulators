@@ -6,6 +6,10 @@ import "base:intrinsics"
 cpu_exec_instr :: proc(cpu: ^Cpu) {
   cpu_check_irq(cpu)
 
+  if cpu.pc == 0xE4FA {
+    is_tracing_enabled = true
+  }
+
   pc_start := cpu.pc
 
   opc := cpu_read_pc_u8(cpu)
@@ -35,15 +39,12 @@ cpu_exec_instr :: proc(cpu: ^Cpu) {
     cpu.y = 0
   case .LDA:
     cpu.a = adr_mode_read_u8(cpu, adr)
-    log_instr_info("A=%02X", cpu.a, no_log=true)
     cpu_set_nz(cpu, cpu.a)
   case .LDX:
     cpu.x = adr_mode_read_u8(cpu, adr)
-    log_instr_info("X=%02X", cpu.x, no_log=true)
     cpu_set_nz(cpu, cpu.x)
   case .LDY:
     cpu.y = adr_mode_read_u8(cpu, adr)
-    log_instr_info("Y=%02X", cpu.y, no_log=true)
     cpu_set_nz(cpu, cpu.y)
   case .TAY:
     cpu_dummy_read(cpu)
@@ -103,7 +104,6 @@ cpu_exec_instr :: proc(cpu: ^Cpu) {
     cpu.pc += cast(u16)i16(dest)
     trace_indent += 1
   case .STA:
-    log_instr_info("A = %02X", cpu.a)
     adr_mode_write_u8(cpu, adr, cpu.a)
   case .STX:
     adr_mode_write_u8(cpu, adr, cpu.x)
@@ -296,17 +296,15 @@ cpu_exec_instr :: proc(cpu: ^Cpu) {
     cpu.x, cpu.y = cpu.y, cpu.x
   case .ROL:
     val := adr_mode_read_u8(cpu, adr) 
-    carry := val & 0x80
-    res := (val << 1) | (carry >> 7)
+    res := (val << 1) | u8(cpu.p.car)
     cpu_set_nz(cpu, res)
-    cpu.p.car = carry > 0
+    cpu.p.car = (val & 0x80) > 0
     adr_mode_write_u8(cpu, adr, res)
   case .ROR:
     val := adr_mode_read_u8(cpu, adr) 
-    carry := val & 0x1
-    res := (val >> 1) | (carry << 7)
+    res := (val >> 1) | (u8(cpu.p.car) << 7)
     cpu_set_nz(cpu, res)
-    cpu.p.car = carry > 0
+    cpu.p.car = (val & 0x1) > 0
     adr_mode_write_u8(cpu, adr, res)
   case .ASL:
     val := adr_mode_read_u8(cpu, adr) 
@@ -340,7 +338,7 @@ cpu_exec_instr :: proc(cpu: ^Cpu) {
     cpu.p.neg = (result & 0x80) > 0
     cpu.p.ovf = (result & 0x40) > 0
     cpu.p.zer = result == 0
-    adr_mode_write_u8(cpu, adr, val)
+    adr_mode_write_u8(cpu, adr, result)
   case:
     trace_instr(cpu, opc, pc_start, opc_info, adr, stdout = true)
     unimplemented(fmt.aprintf("%02X", opc))

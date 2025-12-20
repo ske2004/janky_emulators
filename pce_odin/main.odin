@@ -34,7 +34,7 @@ when #config(ENABLE_SPALL, false) {
   }
 }
 
-ENABLE_TRACING_AFTER_FRAME :: 60
+ENABLE_TRACING_AFTER_FRAME :: 1000
 
 main :: proc() {
   when #config(ENABLE_SPALL, false) {
@@ -76,7 +76,9 @@ main :: proc() {
       free_all(context.temp_allocator)
     }
   } else {
-    raylib.InitWindow(640, 480, "pcPÒW")
+    raylib.SetTraceLogLevel(.ERROR)
+
+    raylib.InitWindow(256*3, 224*3, "pcPÒW")
     defer raylib.CloseWindow()
 
     raylib.SetTargetFPS(60)
@@ -107,17 +109,35 @@ main :: proc() {
       pixels_i := 0
 
       for v, i in bus.screen {
-        pixels[i*4+0] = cast(u8)v.r*32
-        pixels[i*4+1] = cast(u8)v.g*32
-        pixels[i*4+2] = cast(u8)v.b*32
+        pixels[i*4+0] = cast(u8)(v.r*32)
+        pixels[i*4+1] = cast(u8)(v.g*32)
+        pixels[i*4+2] = cast(u8)(v.b*32)
         pixels[i*4+3] = 0xFF
       }
+
 
       texture := raylib.LoadTextureFromImage(screen)
       defer raylib.UnloadTexture(texture)
 
-      raylib.DrawTextureRec(texture, {0, 0, 256, 224}, {0, 0}, raylib.WHITE)
+      raylib.DrawTextureEx(texture, {0, 0}, 0, 3, raylib.WHITE)
       raylib.DrawText(fmt.caprintf("FPS: %v\nFRAME: %v\nTIME: %v", raylib.GetFPS(), frame, diff, allocator = context.temp_allocator), 0, 0, 20, raylib.RED) 
+
+      if raylib.IsKeyDown(.ONE) {
+        for i in 0..<0x200 {
+          pixels: [4]u8
+          v := bus.vce.pal[i]
+          pixels[0] = cast(u8)(v.r*32)
+          pixels[1] = cast(u8)(v.g*32)
+          pixels[2] = cast(u8)(v.b*32)
+          pixels[3] = 0xFF
+
+          w, h := 5, 5
+          x := i%16*5
+          y := i/16*5
+
+          raylib.DrawRectangleRec({cast(f32)x, cast(f32)y, cast(f32)w, cast(f32)h}, raylib.Color(pixels))
+        }
+      }
       raylib.EndDrawing()
 
       free_all(context.temp_allocator)

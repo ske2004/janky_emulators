@@ -111,8 +111,8 @@ Vdc :: struct {
   x, y: int
 }
 
-vram_sprite_size :: proc(spr: VramSprite) -> (int, int) {
-  sizes := [4]int{16, 32, 64, 64}
+vram_sprite_size :: proc(spr: VramSprite) -> (uint, uint) {
+  sizes := [4]uint{1, 2, 4, 4}
   return sizes[spr.flags.xsize], sizes[spr.flags.ysize]
 }
 
@@ -146,7 +146,7 @@ vdc_write_reg :: proc(vdc: ^Vdc, reg: VdcReg, val: u16, no_sideffect: bool) {
   case .Hsync, .Hdisp, .Vsync, .Vdisp, .Vend:
     log.warnf("todo: vdc sync register write")
   case .Dmactrl: vdc.dmactrl = cast(VdcDmactrl)val
-  case .Dmasrc: vdc.dmasrc = val
+  case .Dmasrc: vdc.dmasrc = val 
   case .Dmadst: vdc.dmadst = val
   case .Dmalen: vdc.dmalen = val
   case .Dmaspr: vdc.dmaspr = val; vdc.satb_dma_next_vblank = true;
@@ -189,6 +189,24 @@ plot_dot :: proc(bus: ^Bus, x, y: int, color: Rgb333) {
   bus.screen[x+y*256] = color
 }
 
+draw_sprite_tile :: proc(bus: ^Bus, vdc: ^Vdc, px, py: int, pal: uint, taddr: uint) {
+  for x in 0..<uint(16) {
+    for y in 0..<uint(16) {
+      bit0 := (vdc.vram.vram[taddr+y+00]&(1<<(15-x))) > 0
+      bit1 := (vdc.vram.vram[taddr+y+16]&(1<<(15-x))) > 0
+      bit2 := (vdc.vram.vram[taddr+y+32]&(1<<(15-x))) > 0
+      bit3 := (vdc.vram.vram[taddr+y+48]&(1<<(15-x))) > 0
+
+      palidx := uint(bit0) | (uint(bit1)<<1) | (uint(bit2)<<2) | (uint(bit3)<<3)
+
+      if palidx != 0 {
+        color := bus.vce.pal[0x100+pal+palidx]
+        plot_dot(bus, int(x)+px, int(y)+py, color) 
+      }
+    }
+  }
+}
+
 vdc_fill :: proc(bus: ^Bus, using vdc: ^Vdc) {
   bus.screen = {}
 
@@ -202,10 +220,12 @@ vdc_fill :: proc(bus: ^Bus, using vdc: ^Vdc) {
     sprite := vram_get_sprite(&vram, i)
     px, py := cast(int)sprite.x-32, cast(int)sprite.y-64
     w, h := vram_sprite_size(sprite^)
+    pal := sprite.flags.pal*16
+    taddr := cast(uint)sprite.tile<<5
 
-    for x in 0..<w {
-      for y in 0..<h {
-        plot_dot(bus, x+px, y+py, {r=7, g=7, b=7}) 
+    for y in 0..<h {
+      for x in 0..<w {
+        draw_sprite_tile(bus, vdc, px+cast(int)x*16, py+cast(int)y*16, pal, taddr+y*128+x*64)
       }
     }
   }

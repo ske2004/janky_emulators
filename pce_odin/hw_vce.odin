@@ -1,9 +1,11 @@
 package main
 
+import "core:fmt"
+
 Rgb333 :: bit_field u16 {
+  b: uint | 3,
   r: uint | 3,
   g: uint | 3,
-  b: uint | 3,
 }
 
 VceFreq :: enum {
@@ -23,12 +25,16 @@ Vce :: struct {
 
 vce_read :: proc(using vce: ^Vce, addr: VceAddrs) -> u8 {
   switch addr {
-  case .Ctrl_lo: return cast(u8)cast(u16)vce.ctrl&0xFF
+  case .Ctrl_lo: return cast(u8)vce.ctrl
   case .Ctrl_hi: return 0
-  case .PalSelect_lo: return cast(u8)(pal_index&0xFF)
+  case .PalSelect_lo: return cast(u8)pal_index
   case .PalSelect_hi: return cast(u8)((pal_index>>8)&1)
   case .PalColor_lo:  return cast(u8)(cast(u16)pal[pal_index]&0xFF)
-  case .PalColor_hi:  return cast(u8)((cast(u16)pal[pal_index]>>8)&1)
+  case .PalColor_hi:
+    ret := cast(u8)((cast(u16)pal[pal_index]>>8)&1)
+    pal_index += 1
+    pal_index &= 0x1FF
+    return ret
   case .Unknown6, .Unknown7: return 0xFF
   }
 
@@ -43,7 +49,11 @@ vce_write :: proc(using vce: ^Vce, addr: VceAddrs, val: u8) {
   case .PalSelect_lo: pal_index = (pal_index&0x100) | cast(u16)val
   case .PalSelect_hi: pal_index = (pal_index&0xFF) | (((cast(u16)val)<<8)&0x100)
   case .PalColor_lo:  pal[pal_index] = cast(Rgb333)((cast(u16)pal[pal_index]&0x100) | cast(u16)val)
-  case .PalColor_hi:  pal[pal_index] = cast(Rgb333)((cast(u16)pal[pal_index]&0xFF) | ((cast(u16)val<<8)&0x100))
+  case .PalColor_hi:
+    pal[pal_index] = cast(Rgb333)((cast(u16)pal[pal_index]&0xFF) | ((cast(u16)val<<8)&0x100))
+    log_instr_info("vce val %v\n", pal[pal_index])
+    pal_index += 1
+    pal_index &= 0x1FF
   case .Unknown6, .Unknown7: return
   }
 } 

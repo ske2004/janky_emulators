@@ -30,10 +30,15 @@ AdrMode :: enum {
 
 AdrAcc :: struct {}
 
-AdrIndirect :: struct {
-  addr: u16,
-  inner_offs: u16,
+AdrZpgIndirect :: struct {
+  addr: u8,
+  inner_offs: u8,
   outer_offs: u16
+}
+
+AdrZpg :: struct {
+  addr: u8,
+  offs: u8,
 }
 
 AdrBasic :: struct {
@@ -54,6 +59,12 @@ AdrBasicRel :: struct {
   rel: i8
 }
 
+AdrImmZpg :: struct {
+  imm: u8,
+  addr: u8,
+  offs: u8
+}
+
 AdrImmBasic :: struct {
   imm: u8,
   addr: u16,
@@ -62,11 +73,13 @@ AdrImmBasic :: struct {
 
 AdrDecoded :: union {
   AdrAcc,
+  AdrZpg,
   AdrBasic,
-  AdrIndirect,
+  AdrZpgIndirect,
   AdrImm,
   AdrRel,
   AdrBasicRel,
+  AdrImmZpg,
   AdrImmBasic,
 }
 
@@ -78,18 +91,18 @@ adr_decode :: proc(cpu: ^Cpu, adr: AdrMode) -> AdrDecoded {
     case .Abs: return AdrBasic{addr = cpu_read_pc_u16(cpu)}
     case .Abx: return AdrBasic{addr = cpu_read_pc_u16(cpu), offs = cast(u16)cpu.x}
     case .Aby: return AdrBasic{addr = cpu_read_pc_u16(cpu), offs = cast(u16)cpu.y}
-    case .Zpg: return AdrBasic{addr = cast(u16)cpu_read_pc_u8(cpu)|ZPG_START }
-    case .Zpx: return AdrBasic{addr = cast(u16)cpu_read_pc_u8(cpu)|ZPG_START, offs = cast(u16)cpu.x }
-    case .Zpi: return AdrIndirect{addr = cast(u16)cpu_read_pc_u8(cpu)|ZPG_START }
-    case .Zxi: return AdrIndirect{addr = cast(u16)cpu_read_pc_u8(cpu)|ZPG_START, inner_offs = cast(u16)cpu.x }
-    case .Ziy: return AdrIndirect{addr = cast(u16)cpu_read_pc_u8(cpu)|ZPG_START, outer_offs = cast(u16)cpu.y }
+    case .Zpg: return AdrZpg{addr = cpu_read_pc_u8(cpu) }
+    case .Zpx: return AdrZpg{addr = cpu_read_pc_u8(cpu), offs = cpu.x }
+    case .Zpi: return AdrZpgIndirect{addr = cpu_read_pc_u8(cpu) }
+    case .Zxi: return AdrZpgIndirect{addr = cpu_read_pc_u8(cpu), inner_offs = cpu.x }
+    case .Ziy: return AdrZpgIndirect{addr = cpu_read_pc_u8(cpu), outer_offs = cast(u16)cpu.y }
     case .Rel: return AdrRel{val = transmute(i8)cpu_read_pc_u8(cpu)}
     case .Izp:
       imm := cpu_read_pc_u8(cpu)
-      return AdrImmBasic{ imm = imm, addr = cast(u16)cpu_read_pc_u8(cpu)|ZPG_START }
+      return AdrImmZpg{ imm = imm, addr = cpu_read_pc_u8(cpu) }
     case .Izx:
       imm := cpu_read_pc_u8(cpu)
-      return AdrImmBasic{ imm = imm, addr = cast(u16)cpu_read_pc_u8(cpu)|ZPG_START, offs = cast(u16)cpu.x }
+      return AdrImmZpg{ imm = imm, addr = cpu_read_pc_u8(cpu), offs = cpu.x }
     case .Iab:
       imm := cpu_read_pc_u8(cpu)
       return AdrImmBasic{ imm = imm, addr = cpu_read_pc_u16(cpu) }
@@ -106,14 +119,18 @@ adr_decode :: proc(cpu: ^Cpu, adr: AdrMode) -> AdrDecoded {
 
 adr_mode_read_u8 :: proc(cpu: ^Cpu, adr: AdrDecoded) -> u8 {
   switch v in adr {
-    case AdrAcc:      return cpu.a
-    case AdrBasic:    return cpu_read_u8(cpu, v.addr+v.offs)
-    case AdrIndirect: return cpu_read_u8(cpu, cpu_read_u16(cpu, v.addr+v.inner_offs)+v.outer_offs)
-    case AdrImm:      return v.val
-    case AdrRel:      panic("use adr_mode_read_rel")
-    case AdrBasicRel: return cpu_read_u8(cpu, v.addr)
-    case AdrImmBasic: return cpu_read_u8(cpu, v.addr+v.offs)
-    case:             unimplemented("read on imp")
+    case AdrAcc:         return cpu.a
+    case AdrBasic:       return cpu_read_u8(cpu, v.addr+v.offs)
+    case AdrZpg:         return cpu_read_u8(cpu, cast(u16)(v.addr+v.offs)|ZPG_START)
+    case AdrZpgIndirect:
+      zpg_addr := cpu_read_u16(cpu, cast(u16)(v.addr+v.inner_offs)|ZPG_START)+v.outer_offs
+      return cpu_read_u8(cpu, zpg_addr)
+    case AdrImm:         return v.val
+    case AdrRel:         panic("use adr_mode_read_rel")
+    case AdrBasicRel:    return cpu_read_u8(cpu, v.addr)
+    case AdrImmBasic:    return cpu_read_u8(cpu, v.addr+v.offs)
+    case AdrImmZpg:      return cpu_read_u8(cpu, cast(u16)(v.addr+v.offs)|ZPG_START)
+    case:                unimplemented("read on imp")
   }
 }
 
@@ -141,14 +158,18 @@ adr_mode_read_addr :: proc(cpu: ^Cpu, adr: AdrDecoded) -> u16 {
 
 adr_mode_write_u8 :: proc(cpu: ^Cpu, adr: AdrDecoded, val: u8) {
   switch v in adr {
-    case AdrAcc:      cpu.a = val
-    case AdrBasic:    cpu_write_u8(cpu, v.addr+v.offs, val)
-    case AdrBasicRel: unimplemented("write on basic rel")
-    case AdrIndirect: cpu_write_u8(cpu, cpu_read_u16(cpu, v.addr+v.inner_offs)+v.outer_offs, val)
-    case AdrImm:      unimplemented("write on imm")
-    case AdrRel:      unimplemented("write on rel")
-    case AdrImmBasic: unimplemented("write on imm_basic")
-    case:             unimplemented("write on imp")
+    case AdrAcc:         cpu.a = val
+    case AdrZpg:         cpu_write_u8(cpu, cast(u16)(v.addr+v.offs)|ZPG_START, val)
+    case AdrBasic:       cpu_write_u8(cpu, v.addr+v.offs, val)
+    case AdrBasicRel:    unimplemented("write on basic rel")
+    case AdrZpgIndirect: 
+      zpg_addr := cpu_read_u16(cpu, cast(u16)(v.addr+v.inner_offs)|ZPG_START)+v.outer_offs
+      cpu_write_u8(cpu, zpg_addr, val)
+    case AdrImm:         unimplemented("write on imm")
+    case AdrRel:         unimplemented("write on rel")
+    case AdrImmBasic:    unimplemented("write on imm_basic")
+    case AdrImmZpg:      unimplemented("write on imm_zpg")
+    case:                unimplemented("write on imp")
   }
 }
 
