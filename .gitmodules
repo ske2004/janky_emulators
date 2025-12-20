@@ -1,3 +1,0 @@
-[submodule "third_party/pge"]
-	path = third_party/pge
-	url = https://github.com/OneLoneCoder/olcPixelGameEngine
