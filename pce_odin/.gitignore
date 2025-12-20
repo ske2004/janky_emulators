@@ -1,0 +1,5 @@
+*.spall
+trace.txt
+*.rdi
+*.exe
+*.pdb
