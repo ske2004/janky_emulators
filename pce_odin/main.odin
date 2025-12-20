@@ -34,6 +34,8 @@ when #config(ENABLE_SPALL, false) {
   }
 }
 
+ENABLE_TRACING_AFTER_FRAME :: 60
+
 main :: proc() {
   when #config(ENABLE_SPALL, false) {
     spall_ctx = spall.context_create("trace.spall")
@@ -86,6 +88,10 @@ main :: proc() {
     frame := 0
 
     for !raylib.WindowShouldClose() {
+      if frame == ENABLE_TRACING_AFTER_FRAME {
+        is_tracing_enabled = true
+      }
+
       defer frame += 1
 
       start := time.now()
@@ -111,7 +117,7 @@ main :: proc() {
       defer raylib.UnloadTexture(texture)
 
       raylib.DrawTextureRec(texture, {0, 0, 256, 224}, {0, 0}, raylib.WHITE)
-      raylib.DrawText(fmt.caprintf("FRAME: %v\nTIME: %v", frame, diff, allocator = context.temp_allocator), 0, 0, 20, raylib.RED) 
+      raylib.DrawText(fmt.caprintf("FPS: %v\nFRAME: %v\nTIME: %v", raylib.GetFPS(), frame, diff, allocator = context.temp_allocator), 0, 0, 20, raylib.RED) 
       raylib.EndDrawing()
 
       free_all(context.temp_allocator)

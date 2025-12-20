@@ -6,5 +6,5 @@ if "%1" == "prof" (
 ) else if "%1" == "headless" (
   odin run . -define:ENABLE_TRACING=true -define:HEADLESS=true -debug -- "P:\ROMS\Bomberman (Japan).pce"
 ) else (
-  odin run . -define:ENABLE_TRACING=true -microarch:native -debug -- "P:\ROMS\Bomberman (Japan).pce"
+  odin run . -o:speed -define:ENABLE_TRACING=true -microarch:native -debug -- "P:\ROMS\Bomberman (Japan).pce"
 )

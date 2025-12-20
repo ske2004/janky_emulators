@@ -103,6 +103,7 @@ cpu_exec_instr :: proc(cpu: ^Cpu) {
     cpu.pc += cast(u16)i16(dest)
     trace_indent += 1
   case .STA:
+    log_instr_info("A = %02X", cpu.a)
     adr_mode_write_u8(cpu, adr, cpu.a)
   case .STX:
     adr_mode_write_u8(cpu, adr, cpu.x)
@@ -124,12 +125,12 @@ cpu_exec_instr :: proc(cpu: ^Cpu) {
   case .SBC:
     // i dont know any better
     val := adr_mode_read_u8(cpu, adr)
-    calc := cast(u16)cpu.a - cast(u16)val - cast(u16)cpu.p.car
-    ovf := (cpu.a&0x7F) - (val&0x7F) - cast(u8)cpu.p.car
+    calc := cast(u16)cpu.a - cast(u16)val - cast(u16)(!cpu.p.car)
+    ovf := (cpu.a&0x7F) - (val&0x7F) - cast(u8)(!cpu.p.car)
     result := cast(i8)(calc&0xFF)
 
     cpu.p.neg = result < 0
-    cpu.p.car = (calc & 0x0100) > 0
+    cpu.p.car = (calc & 0xFF00) == 0
     cpu.p.ovf = ((ovf & 0x80) > 0) ~ cpu.p.car
     cpu.p.zer = result == 0
 
@@ -142,19 +143,19 @@ cpu_exec_instr :: proc(cpu: ^Cpu) {
   case .CMP:
     check := adr_mode_read_u8(cpu, adr)
     result := cpu.a-check
-    cpu.p.car = ((cast(u16)cpu.a-cast(u16)check)&0xFF00) > 0
+    cpu.p.car = ((cast(u16)cpu.a-cast(u16)check)&0xFF00) == 0
     cpu.p.zer = cpu.a==check
     cpu.p.neg = (result&0x80) > 0
   case .CPX:
     check := adr_mode_read_u8(cpu, adr)
     result := cpu.x-check
-    cpu.p.car = ((cast(u16)cpu.x-cast(u16)check)&0xFF00) > 0
+    cpu.p.car = ((cast(u16)cpu.x-cast(u16)check)&0xFF00) == 0
     cpu.p.zer = cpu.x==check
     cpu.p.neg = (result&0x80) > 0
   case .CPY:
     check := adr_mode_read_u8(cpu, adr)
     result := cpu.y-check
-    cpu.p.car = ((cast(u16)cpu.y-cast(u16)check)&0xFF00) > 0
+    cpu.p.car = ((cast(u16)cpu.y-cast(u16)check)&0xFF00) == 0
     cpu.p.zer = cpu.y==check
     cpu.p.neg = (result&0x80) > 0
   case .BEQ:
@@ -333,6 +334,13 @@ cpu_exec_instr :: proc(cpu: ^Cpu) {
     cpu.p.neg = (result & 0x80) > 0
     cpu.p.ovf = (result & 0x40) > 0
     cpu.p.zer = result == 0
+  case .TSB:
+    val := adr_mode_read_u8(cpu, adr)
+    result := cpu.a | val
+    cpu.p.neg = (result & 0x80) > 0
+    cpu.p.ovf = (result & 0x40) > 0
+    cpu.p.zer = result == 0
+    adr_mode_write_u8(cpu, adr, val)
   case:
     trace_instr(cpu, opc, pc_start, opc_info, adr, stdout = true)
     unimplemented(fmt.aprintf("%02X", opc))

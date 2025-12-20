@@ -200,7 +200,7 @@ vdc_fill :: proc(bus: ^Bus, using vdc: ^Vdc) {
 
   for i in 0..<uint(64) {
     sprite := vram_get_sprite(&vram, i)
-    px, py := cast(int)sprite.x-32, cast(int)sprite.x-64
+    px, py := cast(int)sprite.x-32, cast(int)sprite.y-64
     w, h := vram_sprite_size(sprite^)
 
     for x in 0..<w {
@@ -211,22 +211,31 @@ vdc_fill :: proc(bus: ^Bus, using vdc: ^Vdc) {
   }
 }
 
-vdc_cycle :: proc(bus: ^Bus, using vdc: ^Vdc) {
-  x += 3
-  if x == 342 {
-    x = 0
-    y += 1
-    if y == 263 {
-      y = 0
-      vdc_fill(bus, vdc)
-      bus.vblank_occured = true
-    }
-  }
+vdc_cyc := 0
 
-  if (x == 0 && y == 258 && vdc.cr.vblank_int) {
-    log_instr_info("vblank!")
-    vdc.status.vblank_happen = true
-    bus_irq(bus, .Irq1)
+vdc_cycle :: proc(bus: ^Bus, using vdc: ^Vdc) {
+  vdc_cyc += 3
+
+  // TODO: temporary
+  if vdc_cyc >= 4 {
+    vdc_cyc -= 4
+
+    x += 1
+    if x == 342 {
+      x = 0
+      y += 1
+      if y == 263 {
+        y = 0
+        vdc_fill(bus, vdc)
+        bus.vblank_occured = true
+      }
+    }
+
+    if (x == 0 && y == 258 && vdc.cr.vblank_int) {
+      log_instr_info("vblank!")
+      vdc.status.vblank_happen = true
+      bus_irq(bus, .Irq1)
+    }
   }
 }
 

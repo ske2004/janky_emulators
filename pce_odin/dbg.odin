@@ -3,6 +3,8 @@ package main
 import "core:fmt"
 import "core:log"
 
+is_tracing_enabled := false
+
 format_adr :: proc(cpu: ^Cpu, opc_info: OpcInfo, adr_decoded: AdrDecoded) -> string {
   #partial switch opc_info.adr {
     case .Imp:
@@ -40,6 +42,7 @@ trace_indent := 0
 
 log_instr_info :: proc(fmt_arg: string, args: ..any, no_log: bool = false) {
   when #config(ENABLE_TRACING, false) {
+    if !is_tracing_enabled { return }
     if !no_log {
       log.infof(fmt_arg, ..args)
     }
@@ -57,6 +60,7 @@ log_instr_info :: proc(fmt_arg: string, args: ..any, no_log: bool = false) {
 
 trace_instr :: proc(cpu: ^Cpu, opc: u8, pc: u16, opc_info: OpcInfo, adr_decoded: AdrDecoded, stdout := false) {
   when #config(ENABLE_TRACING, false) {
+    if !is_tracing_enabled { return }
     context.allocator = context.temp_allocator
     t := format_adr(cpu, opc_info, adr_decoded)
 
