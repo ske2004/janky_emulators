@@ -140,11 +140,9 @@ vram_get_sprite :: proc(vram: ^Vram, i: uint) -> ^VramSprite {
 }
 
 vdc_rw_increment :: proc(vdc: ^Vdc) -> u16 {
-  if vdc.cr.rw_increment == 0 {
-    return 1
-  }
+  increment_table := [4]u16{1, 32, 64, 128}
 
-  return 1 << (vdc.cr.rw_increment + 4)
+  return increment_table[vdc.cr.rw_increment]
 }
 
 vdc_write_reg :: proc(vdc: ^Vdc, reg: VdcReg, val: u16, no_sideffect: bool) {
@@ -155,10 +153,10 @@ vdc_write_reg :: proc(vdc: ^Vdc, reg: VdcReg, val: u16, no_sideffect: bool) {
   case .Marr: vdc.marr = val&0x7FFF
   case .Vrw: panic("vrw write is special")
   case .Unused0, .Unused1:
-  case .Cr:   vdc.cr = cast(VdcCr)val; log.warnf("todo: vdc cr")
-  case .Rcr:  vdc.rcr = val&0x1FF
-  case .Scrollx:  vdc.scroll_x = val&0x1FF
-  case .Scrolly:  vdc.scroll_y = val&0x1FF
+  case .Cr: vdc.cr = cast(VdcCr)val; log.warnf("todo: vdc cr")
+  case .Rcr: vdc.rcr = val&0x1FF
+  case .Scrollx: vdc.scroll_x = val&0x1FF
+  case .Scrolly: vdc.scroll_y = val&0x1FF
   case .Mwr:  vdc.mwr = cast(VdcMwr)val
   case .Hsync, .Hdisp, .Vsync, .Vdisp, .Vend:
     log.warnf("todo: vdc sync register write")
@@ -178,18 +176,18 @@ vdc_read_reg :: proc(vdc: ^Vdc, reg: VdcReg, no_sideffect: bool, no_log: bool = 
     ret = vdc.vram.vram[vdc.marr]
     if !no_sideffect { vdc.marr += vdc_rw_increment(vdc); vdc.marr &= 0x7FFF }
   case .Unused0, .Unused1:
-  case .Cr:   ret = cast(u16)vdc.cr; log.warnf("todo: vdc cr")
-  case .Rcr:  ret = vdc.rcr
-  case .Scrollx:  ret = vdc.scroll_x
-  case .Scrolly:  ret = vdc.scroll_y
-  case .Mwr:  return cast(u16)vdc.mwr
+  case .Cr: ret = cast(u16)vdc.cr; log.warnf("todo: vdc cr")
+  case .Rcr: ret = vdc.rcr
+  case .Scrollx: ret = vdc.scroll_x
+  case .Scrolly: ret = vdc.scroll_y
+  case .Mwr: return cast(u16)vdc.mwr
   case .Hsync, .Hdisp, .Vsync, .Vdisp, .Vend:
     log.warnf("todo: vdc sync register read")
   case .Dmactrl: ret = cast(u16)vdc.dmactrl
-  case .Dmasrc:  ret = vdc.dmasrc
-  case .Dmadst:  ret = vdc.dmadst
-  case .Dmalen:  ret = vdc.dmalen
-  case .Dmaspr:  ret = vdc.dmaspr
+  case .Dmasrc: ret = vdc.dmasrc
+  case .Dmadst: ret = vdc.dmadst
+  case .Dmalen: ret = vdc.dmalen
+  case .Dmaspr: ret = vdc.dmaspr
   }
     
 
@@ -222,6 +220,23 @@ draw_sprite_tile :: proc(bus: ^Bus, vdc: ^Vdc, px, py: int, pal: uint, taddr: ui
       }
     }
   }
+}
+
+vdc_dma_transfer :: proc(vdc: ^Vdc) {
+  fmt.printf("DMA!\n")
+  for vdc.dmalen > 0 {
+    vdc.vram.vram[vdc.dmadst] = vdc.vram.vram[vdc.dmasrc]
+    switch vdc.dmactrl.src_action {
+      case .Inc: vdc.dmasrc += 1
+      case .Dec: vdc.dmasrc -= 1
+    }
+    switch vdc.dmactrl.dst_action {
+      case .Inc: vdc.dmadst += 1
+      case .Dec: vdc.dmadst -= 1
+    }
+    vdc.dmalen -= 1
+  }
+  vdc.status.vram_dma_end = true
 }
 
 vdc_fill :: proc(bus: ^Bus, using vdc: ^Vdc) {
@@ -322,6 +337,7 @@ vdc_cycle :: proc(bus: ^Bus, using vdc: ^Vdc) {
         // TODO: what if it overflows vram addr?
         mem.copy(&vram.satb, &vram.vram[dmaspr], size_of(vram.satb))
         satb_dma_next_vblank = false
+        vdc.status.vram_to_satb_end = true
       }
       log_instr_info("vblank!")
       vdc.status.vblank_happen = true
@@ -348,6 +364,9 @@ vdc_write :: proc(bus: ^Bus, vdc: ^Vdc, addr: VdcAddrs, val: u8) {
       vdc.mawr &= 0x7FFF
     } else {
       vdc_write_reg(vdc, vdc.reg_selected, (vdc_read_reg(vdc, vdc.reg_selected, true, no_log=true)&0xFF)|(cast(u16)val << 8), false)
+      if vdc.reg_selected == .Dmalen {
+        vdc_dma_transfer(vdc)
+      }
     }
   }
 }

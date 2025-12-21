@@ -18,7 +18,15 @@ cpu_exec_instr :: proc(cpu: ^Cpu) {
 
   trace_instr(cpu, opc, pc_start, opc_info, adr)
 
-  #partial switch opc_info.instr {
+  switch opc_info.instr {
+  case .BRK:
+    cpu_read_pc_u8(cpu)
+    cpu_stk_push_u16(cpu, cpu.pc-1)
+    cpu_stk_push_u8(cpu, cast(u8)cpu.p)
+    cpu.pc = cpu_read_u16(cpu, IRQ2_START)
+    cpu.p.int = true
+    cpu.p.brk = true
+    cpu.p.dec = false
   case .CSH:
     cpu_dummy_read(cpu)
     cpu.fast = true
@@ -170,6 +178,10 @@ cpu_exec_instr :: proc(cpu: ^Cpu) {
     if cpu.p.car do cpu.pc += cast(u16)i16(adr_mode_read_rel(cpu, adr))
   case .BCC:
     if !cpu.p.car do cpu.pc += cast(u16)i16(adr_mode_read_rel(cpu, adr))
+  case .BVS:
+    if cpu.p.ovf do cpu.pc += cast(u16)i16(adr_mode_read_rel(cpu, adr))
+  case .BVC:
+    if !cpu.p.ovf do cpu.pc += cast(u16)i16(adr_mode_read_rel(cpu, adr))
   case .BRA:
     cpu.pc += cast(u16)i16(adr_mode_read_rel(cpu, adr))
   case .CLI:
@@ -184,6 +196,9 @@ cpu_exec_instr :: proc(cpu: ^Cpu) {
   case .SEC:
     cpu_dummy_read(cpu)
     cpu.p.car = true
+  case .CLV:
+    cpu_dummy_read(cpu)
+    cpu.p.ovf = false
   case .DEC:
     v := adr_mode_read_u8(cpu, adr)
     v -= 1
@@ -252,7 +267,7 @@ cpu_exec_instr :: proc(cpu: ^Cpu) {
     cpu_set_nz(cpu, cpu.a)
   case .EOR:
     val := adr_mode_read_u8(cpu, adr)
-    cpu.a = val ~ cpu.a
+    cpu.a ~= val
     cpu_set_nz(cpu, cpu.a)
   case .ORA:
     val := adr_mode_read_u8(cpu, adr)
@@ -329,17 +344,30 @@ cpu_exec_instr :: proc(cpu: ^Cpu) {
     imm := adr_mode_read_imm(cpu, adr)
     val := adr_mode_read_u8(cpu, adr)
     result := imm & val
-    cpu.p.neg = (result & 0x80) > 0
-    cpu.p.ovf = (result & 0x40) > 0
+    cpu.p.neg = (val & 0x80) > 0
+    cpu.p.ovf = (val & 0x40) > 0
     cpu.p.zer = result == 0
-  case .TSB:
+  case .TRB:
     val := adr_mode_read_u8(cpu, adr)
-    result := cpu.a | val
+    result := cpu.a & ~val
     cpu.p.neg = (result & 0x80) > 0
     cpu.p.ovf = (result & 0x40) > 0
     cpu.p.zer = result == 0
     adr_mode_write_u8(cpu, adr, result)
-  case:
+  case .TSB:
+    val := adr_mode_read_u8(cpu, adr)
+    result := cpu.a | val
+    cpu.p.neg = (val & 0x80) > 0
+    cpu.p.ovf = (val & 0x40) > 0
+    cpu.p.zer = result == 0
+    adr_mode_write_u8(cpu, adr, result)
+  case .BIT:
+    val := adr_mode_read_u8(cpu, adr)
+    result := cpu.a & val
+    cpu.p.neg = (val & 0x80) > 0
+    cpu.p.ovf = (val & 0x40) > 0
+    cpu.p.zer = result == 0
+  case .UNK:
     trace_instr(cpu, opc, pc_start, opc_info, adr, stdout = true)
     unimplemented(fmt.aprintf("%02X", opc))
   }

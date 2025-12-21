@@ -148,6 +148,7 @@ adr_mode_read_u8 :: proc(cpu: ^Cpu, adr: AdrDecoded) -> u8 {
 adr_mode_read_imm :: proc(cpu: ^Cpu, adr: AdrDecoded) -> u8 {
   #partial switch v in adr {
     case AdrImmBasic: return v.imm
+    case AdrImmZpg:   return v.imm
     case:             unimplemented("read_imm only for tst")
   }
 }
