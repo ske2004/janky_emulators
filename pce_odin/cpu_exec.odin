@@ -6,7 +6,7 @@ import "base:intrinsics"
 cpu_exec_instr :: proc(cpu: ^Cpu) {
   cpu_check_irq(cpu)
 
-  if cpu.pc == 0xE4FA {
+  if cpu.pc == 0xE17E {
     is_tracing_enabled = true
   }
 

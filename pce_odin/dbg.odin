@@ -23,6 +23,8 @@ format_adr :: proc(cpu: ^Cpu, opc_info: OpcInfo, adr_decoded: AdrDecoded) -> str
       return fmt.aprintf("%04X, X=$%02X", adr_decoded.(AdrBasic).addr, adr_decoded.(AdrBasic).offs)
     case .Aby:
       return fmt.aprintf("%04X, Y=$%02X", adr_decoded.(AdrBasic).addr, adr_decoded.(AdrBasic).offs)
+    case. Axi: 
+      return fmt.aprintf("(%04X, X=$%02X)", adr_decoded.(AdrBasicIndirect).addr, adr_decoded.(AdrBasicIndirect).inner_offs)
     case .Rel:
       return fmt.aprintf("%+d", adr_decoded.(AdrRel).val)
     case .Zpi:
