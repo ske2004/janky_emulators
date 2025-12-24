@@ -36,6 +36,13 @@ Vecs :: struct #packed {
   reset: u16le, // $FFFE
 }
 
+OpcInfo :: struct {
+  instr: Instr,
+  adr: AdrMode,
+  ref_cyc: u8,  // refence cyles, can be 0 if unknonw
+  extra: u8,    // for these instruction with numbers c:
+}
+
 Cpu :: struct {
   a, x, y, sp: u8,
   pc: u16,
@@ -101,6 +108,15 @@ cpu_read_u16 :: #force_inline proc(cpu: ^Cpu, addr: u16) -> u16 {
   lo := cast(u16)bus_read_u8(cpu.bus, cpu_mem_map(cpu, addr))
   cpu_cycle(cpu)
   hi := cast(u16)bus_read_u8(cpu.bus, cpu_mem_map(cpu, addr+1))
+  cpu_cycle(cpu)
+  return (hi << 8) | lo
+}
+
+@(no_instrumentation=true) 
+cpu_read_u16_zpg :: #force_inline proc(cpu: ^Cpu, addr: u8) -> u16 {
+  lo := cast(u16)bus_read_u8(cpu.bus, cpu_mem_map(cpu, ZPG_START|cast(u16)(addr)))
+  cpu_cycle(cpu)
+  hi := cast(u16)bus_read_u8(cpu.bus, cpu_mem_map(cpu, ZPG_START|cast(u16)(addr+1)))
   cpu_cycle(cpu)
   return (hi << 8) | lo
 }
@@ -247,7 +263,7 @@ cpu_check_irq :: proc(cpu: ^Cpu) {
 cpu_init :: proc(bus: ^Bus) -> Cpu {
   return {
     p = {int = true, brk = true},
-    pc = bank_sel(BANK_START),
+    pc = cast(u16)bus.rom[0x1FFE] | cast(u16)bus.rom[0x1FFF]<<8,
     opc_tbl = init_opcode_table(),
     bus = bus
   }

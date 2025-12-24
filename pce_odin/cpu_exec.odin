@@ -6,10 +6,6 @@ import "base:intrinsics"
 cpu_exec_instr :: proc(cpu: ^Cpu) {
   cpu_check_irq(cpu)
 
-  if cpu.pc == 0xE17E {
-    is_tracing_enabled = true
-  }
-
   pc_start := cpu.pc
 
   opc := cpu_read_pc_u8(cpu)
@@ -118,31 +114,28 @@ cpu_exec_instr :: proc(cpu: ^Cpu) {
   case .STY:
     adr_mode_write_u8(cpu, adr, cpu.y)
   case .ADC:
-    // i dont know any better
     val := adr_mode_read_u8(cpu, adr)
     calc := cast(u16)cpu.a + cast(u16)val + cast(u16)cpu.p.car
-    ovf := (cpu.a&0x7F) + (val&0x7F) + cast(u8)cpu.p.car
-    result := cast(i8)(calc&0xFF)
+    result := cast(u8)(calc&0xFF)
 
-    cpu.p.neg = result < 0
-    cpu.p.car = (calc & 0x0100) > 0
-    cpu.p.ovf = ((ovf & 0x80) > 0) ~ cpu.p.car
+    cpu.p.neg = (result & 0x80) > 0
+    cpu.p.car = calc > 0xFF
+    // learned from mesen ^^ bitwise (sign(a) == sign(val) && sign(a) != sign(result))
+    cpu.p.ovf = (~(cpu.a ~ val) & (cpu.a ~ result) & 0x80) > 0
     cpu.p.zer = result == 0
 
-    cpu.a = cast(u8)result
+    cpu.a = result
   case .SBC:
-    // i dont know any better
     val := adr_mode_read_u8(cpu, adr)
-    calc := cast(u16)cpu.a - cast(u16)val - cast(u16)(!cpu.p.car)
-    ovf := (cpu.a&0x7F) - (val&0x7F) - cast(u8)(!cpu.p.car)
-    result := cast(i8)(calc&0xFF)
+    calc := cast(u16)cpu.a + cast(u16)~val + cast(u16)cpu.p.car
+    result := cast(u8)(calc&0xFF)
 
-    cpu.p.neg = result < 0
-    cpu.p.car = (calc & 0xFF00) == 0
-    cpu.p.ovf = ((ovf & 0x80) > 0) ~ cpu.p.car
+    cpu.p.neg = (result & 0x80) > 0
+    cpu.p.car = calc > 0xFF
+    cpu.p.ovf = (~(cpu.a ~ val) & (cpu.a ~ result) & 0x80) > 0
     cpu.p.zer = result == 0
 
-    cpu.a = cast(u8)result
+    cpu.a = result
   case .RTS:
     cpu_dummy_read(cpu)
     cpu.pc = cpu_stk_pop_u16(cpu)
@@ -151,19 +144,19 @@ cpu_exec_instr :: proc(cpu: ^Cpu) {
   case .CMP:
     check := adr_mode_read_u8(cpu, adr)
     result := cpu.a-check
-    cpu.p.car = ((cast(u16)cpu.a-cast(u16)check)&0xFF00) == 0
+    cpu.p.car = cpu.a>=check
     cpu.p.zer = cpu.a==check
     cpu.p.neg = (result&0x80) > 0
   case .CPX:
     check := adr_mode_read_u8(cpu, adr)
     result := cpu.x-check
-    cpu.p.car = ((cast(u16)cpu.x-cast(u16)check)&0xFF00) == 0
+    cpu.p.car = cpu.x>=check
     cpu.p.zer = cpu.x==check
     cpu.p.neg = (result&0x80) > 0
   case .CPY:
     check := adr_mode_read_u8(cpu, adr)
     result := cpu.y-check
-    cpu.p.car = ((cast(u16)cpu.y-cast(u16)check)&0xFF00) == 0
+    cpu.p.car = cpu.y>=check
     cpu.p.zer = cpu.y==check
     cpu.p.neg = (result&0x80) > 0
   case .BEQ:
@@ -311,13 +304,13 @@ cpu_exec_instr :: proc(cpu: ^Cpu) {
     cpu.x, cpu.y = cpu.y, cpu.x
   case .ROL:
     val := adr_mode_read_u8(cpu, adr) 
-    res := (val << 1) | u8(cpu.p.car)
+    res := (val << 1) | (cpu.p.car ? 1 : 0)
     cpu_set_nz(cpu, res)
     cpu.p.car = (val & 0x80) > 0
     adr_mode_write_u8(cpu, adr, res)
   case .ROR:
     val := adr_mode_read_u8(cpu, adr) 
-    res := (val >> 1) | (u8(cpu.p.car) << 7)
+    res := (val >> 1) | (cpu.p.car ? 0x80 : 0)
     cpu_set_nz(cpu, res)
     cpu.p.car = (val & 0x1) > 0
     adr_mode_write_u8(cpu, adr, res)
@@ -349,9 +342,9 @@ cpu_exec_instr :: proc(cpu: ^Cpu) {
     cpu.p.zer = result == 0
   case .TRB:
     val := adr_mode_read_u8(cpu, adr)
-    result := cpu.a & ~val
-    cpu.p.neg = (result & 0x80) > 0
-    cpu.p.ovf = (result & 0x40) > 0
+    result := val & ~cpu.a
+    cpu.p.neg = (val & 0x80) > 0
+    cpu.p.ovf = (val & 0x40) > 0
     cpu.p.zer = result == 0
     adr_mode_write_u8(cpu, adr, result)
   case .TSB:

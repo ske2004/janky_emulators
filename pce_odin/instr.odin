@@ -5,100 +5,22 @@ package main
 Instr :: enum {
   UNK,
 
-  ADC,
-  AND,
-  ASL,
-  BBR, // + extra
-  BBS, // + extra
-  BCC,
-  BCS,
-  BEQ,
-  BIT,
-  BMI,
-  BNE,
-  BPL,
-  BRA,
-  BRK,
-  BSR,
-  BVC,
-  BVS,
-  CLA,
-  CLC,
-  CLD,
-  CLI,
-  CLV,
-  CLX,
-  CLY,
-  CMP,
-  CPX,
-  CPY,
-  CSH,
-  CSL,
-  DEC,
-  DEX,
-  DEY,
+  ADC,AND,ASL,
+  BBR,BBS,BCC,BCS,BEQ,BIT,BMI,BNE,BPL,BRA,BRK,BSR,BVC,BVS,
+  CLA,CLC,CLD,CLI,CLV,CLX,CLY,CMP,CPX,CPY,CSH,CSL,
+  DEC,DEX,DEY,
   EOR,
-  INC,
-  INX,
-  INY,
-  JMP,
-  JSR,
-  LDA,
-  LDX,
-  LDY,
-  LSR,
+  INC,INX,INY,
+  JMP,JSR,
+  LDA,LDX,LDY,LSR,
   NOP,
   ORA,
-  PHA,
-  PHP,
-  PHX,
-  PHY,
-  PLA,
-  PLP,
-  PLX,
-  PLY,
-  RMB, // + extra
-  ROL,
-  ROR,
-  RTI,
-  RTS,
-  SAX,
-  SAY,
-  SBC,
-  SEC,
-  SEI,
-  SMB, // + extra
-  ST0,
-  ST1,
-  ST2,
-  STA,
-  STX,
-  STY,
-  STZ,
-  SXY,
-  TAI,
-  TAM,
-  TAX,
-  TAY,
-  TDD,
-  TIA,
-  TII,
-  TIN,
-  TMA,
-  TRB,
-  TSB,
-  TST,
-  TSX,
-  TXA,
-  TXS,
-  TYA,
-}
-
-OpcInfo :: struct {
-  instr: Instr,
-  adr: AdrMode,
-  ref_cyc: u8,  // refence cyles, can be 0 if unknonw
-  extra: u8,    // for these instruction with numbers c:
+  PHA,PHP,PHX,PHY,
+  PLA,PLP,PLX,PLY,
+  RMB,ROL,ROR,RTI,RTS,
+  SAX,SAY,SBC,SEC,SEI,SMB,
+  ST0,ST1,ST2,STA,STX,STY,STZ,SXY,
+  TAI,TAM,TAX,TAY,TDD,TIA,TII,TIN,TMA,TRB,TSB,TST,TSX,TXA,TXS,TYA,
 }
 
 @(private="file")
@@ -308,33 +230,17 @@ hand_opcode_table := [256]OpcInfo{
 init_opcode :: proc(opc: u8) -> OpcInfo {
   hi, lo := opc>>4, opc&0xF
   if lo == 0xF {
-    // BBR 0xF0 - 0xF7
-    if hi >= 0x0 && hi <= 0x7 {
-      return {.BBR,.Zpr,6,hi-0x0}
-    }
-
-    // BBS 0xF8 - 0xFF
-    if hi >= 0x8 && hi <= 0xF {
-      return {.BBS,.Zpr,6,hi-0x8}
-    }
+    if hi >= 0x0 && hi <= 0x7 do return {.BBR,.Zpr,6,hi-0x0}
+    if hi >= 0x8 && hi <= 0xF do return {.BBS,.Zpr,6,hi-0x8}
   } else if lo == 0x7 {
-    // RMB 0x70 - 0x77
-    if hi >= 0x0 && hi <= 0x7 {
-      return {.RMB,.Zpg,7,hi-0x0}
-    }
-
-    // SMB 0x78 - 0x7F
-    if hi >= 0x8 && hi <= 0xF {
-      return {.SMB,.Zpg,7,hi-0x8}
-    }
+    if hi >= 0x0 && hi <= 0x7 do return {.RMB,.Zpg,7,hi-0x0}
+    if hi >= 0x8 && hi <= 0xF do return {.SMB,.Zpg,7,hi-0x8}
   }
 
   return hand_opcode_table[opc] 
 }
 
 init_opcode_table :: proc() -> (opcodes: [256]OpcInfo) {
-  for i in 0..<256 {
-    opcodes[i] = init_opcode(cast(u8)i)
-  }
+  for i in 0..<256 do opcodes[i] = init_opcode(cast(u8)i)
   return
 }

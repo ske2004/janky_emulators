@@ -99,11 +99,13 @@ adr_decode :: proc(cpu: ^Cpu, adr: AdrMode) -> AdrDecoded {
     case .Abx: return AdrBasic{addr = cpu_read_pc_u16(cpu), offs = cast(u16)cpu.x}
     case .Aby: return AdrBasic{addr = cpu_read_pc_u16(cpu), offs = cast(u16)cpu.y}
     case .Zpg: return AdrZpg{addr = cpu_read_pc_u8(cpu) }
-    case .Zpx: return AdrZpg{addr = cpu_read_pc_u8(cpu), offs = cpu.x }
+    case .Zpx: return AdrZpg{addr = cpu_read_pc_u8(cpu), offs = cpu.x}
+    case .Zpy: return AdrZpg{addr = cpu_read_pc_u8(cpu), offs = cpu.y}
     case .Zpi: return AdrZpgIndirect{addr = cpu_read_pc_u8(cpu) }
     case .Zxi: return AdrZpgIndirect{addr = cpu_read_pc_u8(cpu), inner_offs = cpu.x }
     case .Ziy: return AdrZpgIndirect{addr = cpu_read_pc_u8(cpu), outer_offs = cast(u16)cpu.y }
     case .Axi: return AdrBasicIndirect{ addr = cpu_read_pc_u16(cpu), inner_offs = cast(u16)cpu.x }
+    case .Abi: return AdrBasicIndirect{ addr = cpu_read_pc_u16(cpu) }
     case .Rel: return AdrRel{val = transmute(i8)cpu_read_pc_u8(cpu)}
     case .Izp:
       imm := cpu_read_pc_u8(cpu)
@@ -120,7 +122,7 @@ adr_decode :: proc(cpu: ^Cpu, adr: AdrMode) -> AdrDecoded {
     case .Zpr:
       zpg := cast(u16)cpu_read_pc_u8(cpu)
       rel := cast(i8)cpu_read_pc_u8(cpu)
-      return AdrBasicRel{addr = cast(u16)zpg|ZPG_START, rel = rel}
+      return AdrBasicRel{addr = zpg|ZPG_START, rel = rel}
     case: unimplemented(fmt.aprintf("ADDR MODE %v", adr))
   }
 }
@@ -131,7 +133,7 @@ adr_mode_read_u8 :: proc(cpu: ^Cpu, adr: AdrDecoded) -> u8 {
     case AdrBasic:       return cpu_read_u8(cpu, v.addr+v.offs)
     case AdrZpg:         return cpu_read_u8(cpu, cast(u16)(v.addr+v.offs)|ZPG_START)
     case AdrZpgIndirect:
-      zpg_addr := cpu_read_u16(cpu, cast(u16)(v.addr+v.inner_offs)|ZPG_START)+v.outer_offs
+      zpg_addr := cpu_read_u16_zpg(cpu, v.addr+v.inner_offs)+v.outer_offs
       return cpu_read_u8(cpu, zpg_addr)
     case AdrImm:           return v.val
     case AdrRel:           panic("use adr_mode_read_rel")
@@ -176,7 +178,7 @@ adr_mode_write_u8 :: proc(cpu: ^Cpu, adr: AdrDecoded, val: u8) {
     case AdrBasic:       cpu_write_u8(cpu, v.addr+v.offs, val)
     case AdrBasicRel:    unimplemented("write on basic rel")
     case AdrZpgIndirect: 
-      zpg_addr := cpu_read_u16(cpu, cast(u16)(v.addr+v.inner_offs)|ZPG_START)+v.outer_offs
+      zpg_addr := cpu_read_u16_zpg(cpu, v.addr+v.inner_offs)+v.outer_offs
       cpu_write_u8(cpu, zpg_addr, val)
     case AdrImm:         unimplemented("write on imm")
     case AdrRel:         unimplemented("write on rel")

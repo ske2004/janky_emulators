@@ -5,11 +5,12 @@ import "core:log"
 import "core:time"
 import "core:fmt"
 import "core:mem"
+import "core:io"
 import "base:runtime"
 import "core:sync"
 import "core:prof/spall"
-import "vendor:/raylib"
-  
+import "vendor:raylib"
+ 
 instr_dbg_file : os.Handle
 
 when #config(ENABLE_SPALL, false) {
@@ -58,7 +59,7 @@ main :: proc() {
     panic("give a rom")
   }
 
-  instr_dbg_file = os.open("trace.txt", os.O_WRONLY|os.O_CREATE|os.O_TRUNC) or_else panic("can't open trace")
+  instr_dbg_file = os.open("trace.txt", os.O_WRONLY|os.O_TRUNC|os.O_CREATE) or_else panic("can't open trace")
   defer os.close(instr_dbg_file)
 
   rom := os.read_entire_file(os.args[1]) or_else panic("cant open rom :(")
@@ -96,6 +97,15 @@ main :: proc() {
 
       defer frame += 1
 
+      bus.joy.joypad.a = raylib.IsKeyDown(.X)
+      bus.joy.joypad.b = raylib.IsKeyDown(.Z)
+      bus.joy.joypad.sel = raylib.IsKeyDown(.RIGHT_SHIFT)
+      bus.joy.joypad.run = raylib.IsKeyDown(.ENTER)
+      bus.joy.joypad.up = raylib.IsKeyDown(.UP)
+      bus.joy.joypad.down = raylib.IsKeyDown(.DOWN)
+      bus.joy.joypad.left = raylib.IsKeyDown(.LEFT)
+      bus.joy.joypad.right = raylib.IsKeyDown(.RIGHT)
+
       start := time.now()
       for !bus.vblank_occured {
         cpu_exec_instr(&cpu)
@@ -114,7 +124,6 @@ main :: proc() {
         pixels[i*4+2] = cast(u8)(v.b*32)
         pixels[i*4+3] = 0xFF
       }
-
 
       texture := raylib.LoadTextureFromImage(screen)
       defer raylib.UnloadTexture(texture)
@@ -138,6 +147,36 @@ main :: proc() {
           raylib.DrawRectangleRec({cast(f32)x, cast(f32)y, cast(f32)w, cast(f32)h}, raylib.Color(pixels))
         }
       }
+
+      if raylib.IsKeyDown(.TWO) {
+        for i in 0..<uint(64) {
+          sprite := vram_get_sprite(&bus.vdc.vram, i)^
+          w, h := vram_sprite_dims(sprite)
+
+          raylib.DrawRectangleLinesEx(
+            {
+              cast(f32)sprite.x*3-32*3,
+              cast(f32)sprite.y*3-64*3,
+              cast(f32)w*3,
+              cast(f32)h*3,
+            },
+            3,
+            raylib.WHITE
+          )
+
+          raylib.DrawRectangleLinesEx(
+            {
+              cast(f32)sprite.x*3-32*3,
+              cast(f32)sprite.y*3-64*3,
+              cast(f32)w*3,
+              cast(f32)h*3,
+            },
+            1,
+            raylib.BLACK
+          )
+        }
+      }
+
       raylib.EndDrawing()
 
       free_all(context.temp_allocator)

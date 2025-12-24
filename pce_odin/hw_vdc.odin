@@ -1,8 +1,8 @@
 package main
-
 import "core:log"
 import "core:mem"
 import "core:fmt"
+import "core:container/small_array"
 
 VdcReg :: enum {
   Mawr    = 0x00, // VDC memory write
@@ -68,8 +68,8 @@ VdcCr :: bit_field u16 {
 }
 
 DmaAction :: enum {
-  Inc,
-  Dec,
+  Inc = 0,
+  Dec = 1,
 }
 
 VdcDmactrl :: bit_field u16 {
@@ -121,11 +121,15 @@ Vdc :: struct {
 
   satb_dma_next_vblank: bool,
 
-  w_buf: u16, // low byte for read/write, high byte trigger vdc_write_reg
-
   reg_selected: VdcReg,
 
-  x, y: int
+  x, y: int,
+  ty: u16,
+}
+
+vram_sprite_dims :: proc(spr: VramSprite) -> (uint, uint) {
+  sizes := [4]uint{16, 32, 64, 64}
+  return sizes[spr.flags.xsize], sizes[spr.flags.ysize]
 }
 
 vram_sprite_size :: proc(spr: VramSprite) -> (uint, uint) {
@@ -145,6 +149,186 @@ vdc_rw_increment :: proc(vdc: ^Vdc) -> u16 {
   return increment_table[vdc.cr.rw_increment]
 }
 
+plot_dot :: proc(bus: ^Bus, x, y: int, color: Rgb333) {
+  if x<0 || y<0 || x>=256 || y>=224 do return
+
+  bus.screen[x+y*256] = color
+}
+
+draw_sprite_tile_strip :: proc(bus: ^Bus, vdc: ^Vdc, px, py: int, pal: uint, taddr: uint, sub_y: uint, flip: bool) {
+  for x in 0..<uint(16) {
+    xx := flip ? x : 15-x
+    bit0 := (vdc.vram.vram[taddr+sub_y+00]&(1<<xx)) > 0
+    bit1 := (vdc.vram.vram[taddr+sub_y+16]&(1<<xx)) > 0
+    bit2 := (vdc.vram.vram[taddr+sub_y+32]&(1<<xx)) > 0
+    bit3 := (vdc.vram.vram[taddr+sub_y+48]&(1<<xx)) > 0
+
+    palidx := uint(bit0) | (uint(bit1)<<1) | (uint(bit2)<<2) | (uint(bit3)<<3)
+
+    if palidx != 0 {
+      color := bus.vce.pal[0x100+pal+palidx]
+      plot_dot(bus, int(x)+px, int(sub_y)+py, color) 
+    }
+  }
+}
+
+vdc_dma_transfer :: proc(bus: ^Bus, vdc: ^Vdc) {
+  fmt.printf("DMA!\n")
+  vdc.dmalen -= 1
+  vdc.vram.vram[vdc.dmadst] = vdc.vram.vram[vdc.dmasrc]
+  switch vdc.dmactrl.src_action {
+  case .Inc: vdc.dmasrc += 1
+  case .Dec: vdc.dmasrc -= 1
+  }
+  switch vdc.dmactrl.dst_action {
+  case .Inc: vdc.dmadst += 1
+  case .Dec: vdc.dmadst -= 1
+  }
+  for vdc.dmalen > 0 {
+    vdc.vram.vram[vdc.dmadst] = vdc.vram.vram[vdc.dmasrc]
+    switch vdc.dmactrl.src_action {
+    case .Inc: vdc.dmasrc += 1
+    case .Dec: vdc.dmasrc -= 1
+    }
+    switch vdc.dmactrl.dst_action {
+    case .Inc: vdc.dmadst += 1
+    case .Dec: vdc.dmadst -= 1
+    }
+    vdc.dmalen -= 1
+  }
+  if vdc.dmactrl.vram_to_vram_int {
+    vdc.status.vram_dma_end = true
+    bus_irq(bus, .Irq1)
+  }
+}
+
+draw_sprite_strip :: proc(bus: ^Bus, vdc: ^Vdc, sprites: []VramSprite, y: int, fg: bool) {
+  if !vdc.cr.spr_enable {
+    return
+  }
+
+  for spr, i in sprites {
+    if spr.flags.foreground == fg {
+      px, py := cast(int)spr.x-32, cast(int)spr.y-64
+      yo := (cast(uint)y - cast(uint)py)
+      tile_y, sub_y := yo / 16, yo % 16
+      w, h := vram_sprite_size(spr)
+      pal := spr.flags.pal*16
+      taddr := cast(uint)spr.tile<<5
+
+      for x in 0..<w {
+        xx := x
+
+        if spr.flags.xflip {
+          xx = (w-1)-x
+        }
+
+        draw_sprite_tile_strip(bus, vdc, px+cast(int)x*16, py+cast(int)tile_y*16, pal, taddr+tile_y*128+xx*64, sub_y, spr.flags.xflip)
+      }
+    }
+  }
+}
+
+vdc_draw_scanline :: proc(bus: ^Bus, vdc: ^Vdc, y: int) {
+  sprites: small_array.Small_Array(16, VramSprite)
+
+  for i in 0..<256 {
+    bus.screen[i+y*256] = bus.vce.pal[0]
+  }
+
+  for i in 0..<uint(64) {
+    sprite := vram_get_sprite(&vdc.vram, i)
+    w, h := vram_sprite_dims(sprite^)
+
+    if y >= cast(int)sprite.y-64 && y < cast(int)sprite.y-64+cast(int)h {
+      if !small_array.append_elem(&sprites, sprite^) {
+        // todo: spr overflow
+      }
+    }
+  }
+
+  draw_sprite_strip(bus, vdc, small_array.slice(&sprites), y, false)
+ 
+  if vdc.cr.bkg_enable {
+    tmap_size := tmap_size_table[vdc.mwr.tmap_size]
+    for x in 0..<uint(256) {
+      ax, ay := cast(int)x + cast(int)vdc.scroll_x, cast(int)vdc.ty
+      tx, sx := (ax/8)%cast(int)tmap_size.w, cast(uint)ax%8
+      ty, sy := (ay/8)%cast(int)tmap_size.h, cast(uint)ay%8
+      if tx < 0 do tx += cast(int)tmap_size.w
+      if ty < 0 do ty += cast(int)tmap_size.h
+      tile := vdc.vram.vram[cast(uint)tx+cast(uint)ty*tmap_size.w]
+      tile_pal := cast(uint)(tile >> 12)*16
+      tile_def := cast(uint)(tile << 4)&0x7FFF
+
+      bit0 := (vdc.vram.vram[tile_def+sy+0]&(1<<(15-(sx+8)))) > 0
+      bit1 := (vdc.vram.vram[tile_def+sy+0]&(1<<(15-(sx)))) > 0
+      bit2 := (vdc.vram.vram[tile_def+sy+8]&(1<<(15-(sx+8)))) > 0
+      bit3 := (vdc.vram.vram[tile_def+sy+8]&(1<<(15-(sx)))) > 0
+
+      palidx := uint(bit0) | (uint(bit1)<<1) | (uint(bit2)<<2) | (uint(bit3)<<3)
+
+      if palidx != 0 {
+        color := bus.vce.pal[tile_pal+palidx]
+        bus.screen[x+uint(y)*256] = color
+      }
+    }
+  }
+
+  draw_sprite_strip(bus, vdc, small_array.slice(&sprites), y, true)
+}
+
+vdc_cyc := 0
+
+vdc_cycle :: proc(bus: ^Bus, using vdc: ^Vdc) {
+  vdc_cyc += 4
+
+  // TODO: temporary
+  if vdc_cyc >= 4 {
+    vdc_cyc -= 4
+
+    x += 1
+    if x == 342 {
+      ty += 1
+      if y < 224 {
+        vdc_draw_scanline(bus, vdc, y)
+      } 
+      if y < 224 && vdc.cr.scanline_int && int(vdc.rcr)-64 == y {
+        log_instr_info("rcr!")
+        vdc.status.scanline_happen = true
+        bus_irq(bus, .Irq1)
+      }
+
+      x = 0
+      y += 1
+
+      if y == 263 {
+        y = 0
+        ty = scroll_y
+        bus.vblank_occured = true
+      }
+    }
+
+    if (x == 0 && y == 258 && vdc.cr.vblank_int) {
+      log_instr_info("vblank!")
+      vdc.status.vblank_happen = true
+      bus_irq(bus, .Irq1)
+    }
+
+    if x == 0 && y == 260 {
+      if satb_dma_next_vblank || dmactrl.satb_dma_auto {
+        // TODO: what if it overflows vram addr?
+        mem.copy(&vram.satb, &vram.vram[dmaspr], size_of(vram.satb))
+        satb_dma_next_vblank = false
+        if vdc.dmactrl.vram_to_satb_int {
+          vdc.status.vram_to_satb_end = true
+          bus_irq(bus, .Irq1)
+        }
+      }
+    }
+  }
+}
+
 vdc_write_reg :: proc(vdc: ^Vdc, reg: VdcReg, val: u16, no_sideffect: bool) {
   log_instr_info("vdc write reg: %v %04X (%s)", reg, val, no_sideffect ? "low" : "high")
 
@@ -155,8 +339,8 @@ vdc_write_reg :: proc(vdc: ^Vdc, reg: VdcReg, val: u16, no_sideffect: bool) {
   case .Unused0, .Unused1:
   case .Cr: vdc.cr = cast(VdcCr)val; log.warnf("todo: vdc cr")
   case .Rcr: vdc.rcr = val&0x1FF
-  case .Scrollx: vdc.scroll_x = val&0x1FF
-  case .Scrolly: vdc.scroll_y = val&0x1FF
+  case .Scrollx: vdc.scroll_x = val&0x3FF
+  case .Scrolly: vdc.scroll_y = val&0x1FF; vdc.ty = val&0x1FF
   case .Mwr:  vdc.mwr = cast(VdcMwr)val
   case .Hsync, .Hdisp, .Vsync, .Vdisp, .Vend:
     log.warnf("todo: vdc sync register write")
@@ -178,8 +362,8 @@ vdc_read_reg :: proc(vdc: ^Vdc, reg: VdcReg, no_sideffect: bool, no_log: bool = 
   case .Unused0, .Unused1:
   case .Cr: ret = cast(u16)vdc.cr; log.warnf("todo: vdc cr")
   case .Rcr: ret = vdc.rcr
-  case .Scrollx: ret = vdc.scroll_x
-  case .Scrolly: ret = vdc.scroll_y
+  case .Scrollx: ret = cast(u16)vdc.scroll_x
+  case .Scrolly: ret = cast(u16)vdc.scroll_y
   case .Mwr: return cast(u16)vdc.mwr
   case .Hsync, .Hdisp, .Vsync, .Vdisp, .Vend:
     log.warnf("todo: vdc sync register read")
@@ -198,154 +382,6 @@ vdc_read_reg :: proc(vdc: ^Vdc, reg: VdcReg, no_sideffect: bool, no_log: bool = 
   return
 }
 
-plot_dot :: proc(bus: ^Bus, x, y: int, color: Rgb333) {
-  if x<0 || y<0 || x>=256 || y>=224 do return
-
-  bus.screen[x+y*256] = color
-}
-
-draw_sprite_tile :: proc(bus: ^Bus, vdc: ^Vdc, px, py: int, pal: uint, taddr: uint) {
-  for x in 0..<uint(16) {
-    for y in 0..<uint(16) {
-      bit0 := (vdc.vram.vram[taddr+y+00]&(1<<(15-x))) > 0
-      bit1 := (vdc.vram.vram[taddr+y+16]&(1<<(15-x))) > 0
-      bit2 := (vdc.vram.vram[taddr+y+32]&(1<<(15-x))) > 0
-      bit3 := (vdc.vram.vram[taddr+y+48]&(1<<(15-x))) > 0
-
-      palidx := uint(bit0) | (uint(bit1)<<1) | (uint(bit2)<<2) | (uint(bit3)<<3)
-
-      if palidx != 0 {
-        color := bus.vce.pal[0x100+pal+palidx]
-        plot_dot(bus, int(x)+px, int(y)+py, color) 
-      }
-    }
-  }
-}
-
-vdc_dma_transfer :: proc(vdc: ^Vdc) {
-  fmt.printf("DMA!\n")
-  for vdc.dmalen > 0 {
-    vdc.vram.vram[vdc.dmadst] = vdc.vram.vram[vdc.dmasrc]
-    switch vdc.dmactrl.src_action {
-      case .Inc: vdc.dmasrc += 1
-      case .Dec: vdc.dmasrc -= 1
-    }
-    switch vdc.dmactrl.dst_action {
-      case .Inc: vdc.dmadst += 1
-      case .Dec: vdc.dmadst -= 1
-    }
-    vdc.dmalen -= 1
-  }
-  vdc.status.vram_dma_end = true
-}
-
-vdc_fill :: proc(bus: ^Bus, using vdc: ^Vdc) {
-  bus.screen = {}
-
-  for _, i in bus.screen {
-    bus.screen[i] = bus.vce.pal[0]
-  }
-
-  for i in 0..<uint(64) {
-    sprite := vram_get_sprite(&vram, i)
-    if sprite.flags.foreground {
-      continue
-    }
-    px, py := cast(int)sprite.x-32, cast(int)sprite.y-64
-    w, h := vram_sprite_size(sprite^)
-    pal := sprite.flags.pal*16
-    taddr := cast(uint)sprite.tile<<5
-
-    for y in 0..<h {
-      for x in 0..<w {
-        draw_sprite_tile(bus, vdc, px+cast(int)x*16, py+cast(int)y*16, pal, taddr+y*128+x*64)
-      }
-    }
-  }
-
-  tmap_size := tmap_size_table[mwr.tmap_size]
-
-  for i in 0..<(tmap_size.w*tmap_size.h) {
-    x, y := i%tmap_size.w*8, i/tmap_size.w*8
-    tile := vram.vram[i]
-    tile_pal := cast(uint)(tile >> 12)*16
-    tile_def := cast(uint)(tile << 4)
-
-    for tx in 0..<uint(8) {
-      for ty in 0..<uint(8) {
-        bit0 := (vdc.vram.vram[tile_def+ty+0]&(1<<(15-(tx+8)))) > 0
-        bit1 := (vdc.vram.vram[tile_def+ty+0]&(1<<(15-(tx)))) > 0
-        bit2 := (vdc.vram.vram[tile_def+ty+8]&(1<<(15-(tx+8)))) > 0
-        bit3 := (vdc.vram.vram[tile_def+ty+8]&(1<<(15-(tx)))) > 0
-
-        palidx := uint(bit0) | (uint(bit1)<<1) | (uint(bit2)<<2) | (uint(bit3)<<3)
-
-        if palidx != 0 && tile_pal != 0 {
-          color := bus.vce.pal[tile_pal+palidx]
-          plot_dot(bus, int(x+tx), int(y+ty), color) 
-        }
-      }
-    }
-  }
-
-  for i in 0..<uint(64) {
-    sprite := vram_get_sprite(&vram, i)
-    if !sprite.flags.foreground {
-      continue
-    }
-    px, py := cast(int)sprite.x-32, cast(int)sprite.y-64
-    w, h := vram_sprite_size(sprite^)
-    pal := sprite.flags.pal*16
-    taddr := cast(uint)sprite.tile<<5
-
-    for y in 0..<h {
-      for x in 0..<w {
-        draw_sprite_tile(bus, vdc, px+cast(int)x*16, py+cast(int)y*16, pal, taddr+y*128+x*64)
-      }
-    }
-  }
-}
-
-vdc_cyc := 0
-
-vdc_cycle :: proc(bus: ^Bus, using vdc: ^Vdc) {
-  vdc_cyc += 3
-
-  // TODO: temporary
-  if vdc_cyc >= 4 {
-    vdc_cyc -= 4
-
-    x += 1
-    if x == 342 {
-      if vdc.cr.scanline_int && int(vdc.rcr)-64 == y {
-        log_instr_info("rcr!")
-        vdc.status.scanline_happen = true
-        bus_irq(bus, .Irq1)
-      }
-
-      x = 0
-      y += 1
-      if y == 263 {
-        y = 0
-        vdc_fill(bus, vdc)
-        bus.vblank_occured = true
-      }
-    }
-
-    if (x == 0 && y == 258 && vdc.cr.vblank_int) {
-      if satb_dma_next_vblank || dmactrl.satb_dma_auto {
-        // TODO: what if it overflows vram addr?
-        mem.copy(&vram.satb, &vram.vram[dmaspr], size_of(vram.satb))
-        satb_dma_next_vblank = false
-        vdc.status.vram_to_satb_end = true
-      }
-      log_instr_info("vblank!")
-      vdc.status.vblank_happen = true
-      bus_irq(bus, .Irq1)
-    }
-  }
-}
-
 vdc_write :: proc(bus: ^Bus, vdc: ^Vdc, addr: VdcAddrs, val: u8) {
   switch addr {
   case .Ctrl: vdc.reg_selected = cast(VdcReg)(val & 0x1F); if val > 19 do log.warnf("invalid reg selected %d", val)
@@ -359,13 +395,13 @@ vdc_write :: proc(bus: ^Bus, vdc: ^Vdc, addr: VdcAddrs, val: u8) {
   case .Data_hi:
     if vdc.reg_selected == .Vrw {
       vdc.vram.vram[vdc.mawr] = (vdc.vram.vram[vdc.mawr]&0x00FF) | cast(u16)val<<8
-      log_instr_info("vdc vrw write: %04X", vdc.vram.vram[vdc.mawr])
+      log_instr_info("vdc vrw write: %04X %04X", vdc.mawr, vdc.vram.vram[vdc.mawr])
       vdc.mawr += vdc_rw_increment(vdc)
       vdc.mawr &= 0x7FFF
     } else {
       vdc_write_reg(vdc, vdc.reg_selected, (vdc_read_reg(vdc, vdc.reg_selected, true, no_log=true)&0xFF)|(cast(u16)val << 8), false)
       if vdc.reg_selected == .Dmalen {
-        vdc_dma_transfer(vdc)
+        vdc_dma_transfer(bus, vdc)
       }
     }
   }
@@ -376,7 +412,12 @@ vdc_read :: proc(bus: ^Bus, vdc: ^Vdc, addr: VdcAddrs) -> (ret: u8) {
   case .Ctrl: ret = cast(u8)vdc.status; vdc.status = cast(VdcStatus)0
   case .Unknown1:
   case .Data_lo: ret = cast(u8)(vdc_read_reg(vdc, vdc.reg_selected, true)&0xFF)
-  case .Data_hi: ret = cast(u8)(vdc_read_reg(vdc, vdc.reg_selected, false)>>8)
+  case .Data_hi:
+    ret = cast(u8)(vdc_read_reg(vdc, vdc.reg_selected, false)>>8)
+    if vdc.reg_selected == .Marr {
+      vdc.marr += vdc_rw_increment(vdc)
+      vdc.marr &= 0x7FFF
+    }
   }
 
   return

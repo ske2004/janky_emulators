@@ -3,7 +3,7 @@ package main
 import "core:fmt"
 import "core:log"
 
-is_tracing_enabled := false
+is_tracing_enabled := true
 
 format_adr :: proc(cpu: ^Cpu, opc_info: OpcInfo, adr_decoded: AdrDecoded) -> string {
   #partial switch opc_info.adr {
@@ -28,7 +28,7 @@ format_adr :: proc(cpu: ^Cpu, opc_info: OpcInfo, adr_decoded: AdrDecoded) -> str
     case .Rel:
       return fmt.aprintf("%+d", adr_decoded.(AdrRel).val)
     case .Zpi:
-      return fmt.aprintf("(%04X)", adr_decoded.(AdrZpgIndirect).addr)
+      return fmt.aprintf("(%04X)", cast(u16)adr_decoded.(AdrZpgIndirect).addr|ZPG_START)
     case .Zxi:
       return fmt.aprintf("(%04X, X=$%02X)", cast(u16)adr_decoded.(AdrZpgIndirect).addr|ZPG_START, adr_decoded.(AdrZpgIndirect).inner_offs)
     case .Ziy:
@@ -90,7 +90,7 @@ trace_instr :: proc(cpu: ^Cpu, opc: u8, pc: u16, opc_info: OpcInfo, adr_decoded:
           fmt.fprintf(instr_dbg_file, "  ", flush=false)
         }
       }
-      fmt.fprintf(instr_dbg_file, "%02X %04X %06X %s%s %s | A=%02X\n", opc, pc, cpu_mem_map(cpu, pc), opc_info.instr, extra, t, cpu.a, flush=false)
+      fmt.fprintf(instr_dbg_file, "%02X %04X %06X %s%s %s | A=%02X\n", opc, pc, cpu_mem_map(cpu, pc), opc_info.instr, extra, t, cpu.a, flush=true)
     }
   }
 }
