@@ -39,7 +39,7 @@ Vecs :: struct #packed {
 Opc_Info :: struct {
   instr: Instr,
   adr: Adr_Mode,
-  ref_cyc: u8,  // refence cyles, can be 0 if unknonw
+  ref_cyc: uint,// refence cyles, can be 0 if unknonw
   extra: u8,    // for these instruction with numbers c:
 }
 

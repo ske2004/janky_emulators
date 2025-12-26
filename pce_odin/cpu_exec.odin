@@ -8,6 +8,8 @@ cpu_exec_instr :: proc(cpu: ^CPU) {
 
   pc_start := cpu.pc
 
+  cycle_start := cpu.bus.clocks
+
   opc := cpu_read_pc_u8(cpu)
   opc_info := cpu.opc_tbl[opc]
   adr := adr_decode(cpu, opc_info.adr)
@@ -17,7 +19,7 @@ cpu_exec_instr :: proc(cpu: ^CPU) {
   switch opc_info.instr {
   case .BRK:
     cpu_read_pc_u8(cpu)
-    cpu_stk_push_u16(cpu, cpu.pc-1)
+    cpu_stk_push_u16(cpu, cpu.pc)
     cpu_stk_push_u8(cpu, cast(u8)cpu.p)
     cpu.pc = cpu_read_u16(cpu, IRQ2_START)
     cpu.p.int = true
@@ -364,6 +366,13 @@ cpu_exec_instr :: proc(cpu: ^CPU) {
     trace_instr(cpu, opc, pc_start, opc_info, adr, stdout = true)
     unimplemented(fmt.aprintf("%02X", opc))
   }
+
+  // cycle_end := cpu.bus.clocks
+  // mul : uint = cpu.fast ? 1 : 4
+
+  // if opc_info.ref_cyc != 0 && (cycle_end-cycle_start) != opc_info.ref_cyc*mul {
+  //   fmt.printf("CYCLE MISMATCH: %v (%02X) %v vs %v\n", opc_info.instr, opc, (cycle_end-cycle_start), opc_info.ref_cyc*mul)
+  // }
 
   cpu.p.mem = false
 }

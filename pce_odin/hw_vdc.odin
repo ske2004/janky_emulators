@@ -92,7 +92,7 @@ VDC_Mwr :: bit_field u16 {
   tmap_size: uint | 3,
 }
 
-tmap_size_table := [8]struct{w, h: uint} {
+tmap_size_table := [8][2]uint{
   {32,  32},
   {64,  32},
   {128, 32},
@@ -246,14 +246,15 @@ vdc_draw_scanline :: proc(bus: ^Bus, vdc: ^VDC, y: int) {
   draw_sprite_strip(bus, vdc, small_array.slice(&sprites), y, false)
  
   if vdc.cr.bkg_enable {
+
     tmap_size := tmap_size_table[vdc.mwr.tmap_size]
     for x in 0..<uint(256) {
       ax, ay := cast(int)x + cast(int)vdc.scroll_x, cast(int)vdc.ty
-      tx, sx := (ax/8)%cast(int)tmap_size.w, cast(uint)ax%8
-      ty, sy := (ay/8)%cast(int)tmap_size.h, cast(uint)ay%8
-      if tx < 0 do tx += cast(int)tmap_size.w
-      if ty < 0 do ty += cast(int)tmap_size.h
-      tile := vdc.vram.vram[cast(uint)tx+cast(uint)ty*tmap_size.w]
+      tx, sx := (ax/8)%cast(int)tmap_size.x, cast(uint)ax%8
+      ty, sy := (ay/8)%cast(int)tmap_size.y, cast(uint)ay%8
+      if tx < 0 do tx += cast(int)tmap_size.x
+      if ty < 0 do ty += cast(int)tmap_size.y
+      tile := vdc.vram.vram[cast(uint)tx+cast(uint)ty*tmap_size.x]
       tile_pal := cast(uint)(tile >> 12)*16
       tile_def := cast(uint)(tile << 4)&0x7FFF
 
@@ -294,6 +295,7 @@ vdc_cycle :: proc(bus: ^Bus, using vdc: ^VDC) {
       case .Inc: vdc.dmasrc += 1
       case .Dec: vdc.dmasrc -= 1
       }
+      vdc.dmasrc &= 0x7FFF
       vdc.dma_state = .Write_Dst
     case .Write_Dst:
       vdc.vram.vram[vdc.dmadst] = vdc.dma_buf
@@ -301,6 +303,7 @@ vdc_cycle :: proc(bus: ^Bus, using vdc: ^VDC) {
       case .Inc: vdc.dmadst += 1
       case .Dec: vdc.dmadst -= 1
       }
+      vdc.dmadst &= 0x7FFF
       vdc.dma_state = .Read_Src
 
       if vdc.dmalen == 0 {
@@ -379,8 +382,8 @@ vdc_write_reg :: proc(vdc: ^VDC, reg: VDC_Reg, val: u16, no_sideffect: bool) {
   case .Hsync, .Hdisp, .Vsync, .Vdisp, .Vend:
     log.warnf("todo: vdc sync register write")
   case .DMActrl: vdc.dmactrl = cast(VDC_DMA_Ctrl)val
-  case .DMAsrc: vdc.dmasrc = val 
-  case .DMAdst: vdc.dmadst = val
+  case .DMAsrc: vdc.dmasrc = val&0x7FFF
+  case .DMAdst: vdc.dmadst = val&0x7FFF
   case .DMAlen: vdc.dmalen = val
   case .DMAspr: vdc.dmaspr = val; vdc.satb_dma_next_vblank = true
   }

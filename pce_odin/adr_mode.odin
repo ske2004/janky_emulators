@@ -165,9 +165,9 @@ adr_mode_read_rel :: proc(cpu: ^CPU, adr: Adr_Decoded) -> i8 {
 
 adr_mode_read_addr :: proc(cpu: ^CPU, adr: Adr_Decoded) -> u16 {
   #partial switch v in adr {
-  case Adr_Basic:         return v.addr+v.offs
+  case Adr_Basic:          return v.addr+v.offs
   case Adr_Basic_Indirect: return cpu_read_u16(cpu, v.addr+v.inner_offs)+v.outer_offs
-  case:                  unimplemented("invalid addr")
+  case:                    unimplemented("invalid addr")
   }
 }
 
