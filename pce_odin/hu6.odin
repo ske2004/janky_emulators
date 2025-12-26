@@ -4,20 +4,20 @@ package main
 import "core:fmt"
 import "core:log"
 
-BlockTransferOp :: enum {
+Block_Transfer_Op :: enum {
   NONE,
   INC,
   DEC,
   INCDEC,
 }
 
-BlockTransferReg :: struct {
-  op: BlockTransferOp,
+Block_Transfer_Reg :: struct {
+  op: Block_Transfer_Op,
   value: u16,
   state: bool,
 }
 
-CpuFlags :: bit_field u8 {
+Cpu_Flags :: bit_field u8 {
   car: bool | 1, // carry
   zer: bool | 1, // zero
   int: bool | 1, // interrupt
@@ -36,9 +36,9 @@ Vecs :: struct #packed {
   reset: u16le, // $FFFE
 }
 
-OpcInfo :: struct {
+Opc_Info :: struct {
   instr: Instr,
-  adr: AdrMode,
+  adr: Adr_Mode,
   ref_cyc: u8,  // refence cyles, can be 0 if unknonw
   extra: u8,    // for these instruction with numbers c:
 }
@@ -46,11 +46,11 @@ OpcInfo :: struct {
 Cpu :: struct {
   a, x, y, sp: u8,
   pc: u16,
-  p: CpuFlags,
+  p: Cpu_Flags,
   mpr: [8]u8,
   bus: ^Bus,
   fast: bool,// csh and csl
-  opc_tbl: [256]OpcInfo,
+  opc_tbl: [256]Opc_Info,
 }
 
 BANK_START :: 7
@@ -185,7 +185,7 @@ cpu_set_nz :: #force_inline proc(cpu: ^Cpu, value: u8) {
 }
 
 @(no_instrumentation) 
-update_block_transfer_reg :: #force_inline proc(reg: ^BlockTransferReg) {
+update_block_transfer_reg :: #force_inline proc(reg: ^Block_Transfer_Reg) {
   switch reg.op {
   case .NONE:
   case .INC: reg.value += 1
@@ -196,10 +196,10 @@ update_block_transfer_reg :: #force_inline proc(reg: ^BlockTransferReg) {
   }
 }
 
-block_transfer :: proc(cpu: ^Cpu, srcop, dstop: BlockTransferOp) {
+block_transfer :: proc(cpu: ^Cpu, srcop, dstop: Block_Transfer_Op) {
   clock_start := cpu.bus.clocks
-  src := BlockTransferReg{srcop, cpu_read_pc_u16(cpu), false}
-  dst := BlockTransferReg{dstop, cpu_read_pc_u16(cpu), false}
+  src := Block_Transfer_Reg{srcop, cpu_read_pc_u16(cpu), false}
+  dst := Block_Transfer_Reg{dstop, cpu_read_pc_u16(cpu), false}
   len := cpu_read_pc_u16(cpu)
  
   log_instr_info("BLK src=%s dst=%s: src:%04X (%06X), dst:%04X, len:%04X", srcop, dstop, src.value, cpu_mem_map(cpu, src.value), dst.value, len)

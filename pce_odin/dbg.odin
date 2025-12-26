@@ -5,44 +5,44 @@ import "core:log"
 
 is_tracing_enabled := true
 
-format_adr :: proc(cpu: ^Cpu, opc_info: OpcInfo, adr_decoded: AdrDecoded) -> string {
+format_adr :: proc(cpu: ^Cpu, opc_info: Opc_Info, adr_decoded: Adr_Decoded) -> string {
   #partial switch opc_info.adr {
     case .Imp:
       return ""
     case .Imm:
-      return fmt.aprintf("$%02X", adr_decoded.(AdrImm).val)
+      return fmt.aprintf("$%02X", adr_decoded.(Adr_Imm).val)
     case .Acc:
       return fmt.aprintf("A=$%02X", cpu.a)
     case .Zpg:
-      return fmt.aprintf("%04X", cast(u16)adr_decoded.(AdrZpg).addr|ZPG_START)
+      return fmt.aprintf("%04X", cast(u16)adr_decoded.(Adr_Zpg).addr|ZPG_START)
     case .Zpx:
-      return fmt.aprintf("%04X, X=$%02X", cast(u16)adr_decoded.(AdrZpg).addr|ZPG_START, cast(u16)adr_decoded.(AdrZpg).offs)
+      return fmt.aprintf("%04X, X=$%02X", cast(u16)adr_decoded.(Adr_Zpg).addr|ZPG_START, cast(u16)adr_decoded.(Adr_Zpg).offs)
     case .Abs:
-      return fmt.aprintf("%04X", adr_decoded.(AdrBasic).addr)
+      return fmt.aprintf("%04X", adr_decoded.(Adr_Basic).addr)
     case .Abx:
-      return fmt.aprintf("%04X, X=$%02X", adr_decoded.(AdrBasic).addr, adr_decoded.(AdrBasic).offs)
+      return fmt.aprintf("%04X, X=$%02X", adr_decoded.(Adr_Basic).addr, adr_decoded.(Adr_Basic).offs)
     case .Aby:
-      return fmt.aprintf("%04X, Y=$%02X", adr_decoded.(AdrBasic).addr, adr_decoded.(AdrBasic).offs)
+      return fmt.aprintf("%04X, Y=$%02X", adr_decoded.(Adr_Basic).addr, adr_decoded.(Adr_Basic).offs)
     case. Axi: 
-      return fmt.aprintf("(%04X, X=$%02X)", adr_decoded.(AdrBasicIndirect).addr, adr_decoded.(AdrBasicIndirect).inner_offs)
+      return fmt.aprintf("(%04X, X=$%02X)", adr_decoded.(Adr_Basic_Indirect).addr, adr_decoded.(Adr_Basic_Indirect).inner_offs)
     case .Rel:
-      return fmt.aprintf("%+d", adr_decoded.(AdrRel).val)
+      return fmt.aprintf("%+d", adr_decoded.(Adr_Rel).val)
     case .Zpi:
-      return fmt.aprintf("(%04X)", cast(u16)adr_decoded.(AdrZpgIndirect).addr|ZPG_START)
+      return fmt.aprintf("(%04X)", cast(u16)adr_decoded.(Adr_Zpg_Indirect).addr|ZPG_START)
     case .Zxi:
-      return fmt.aprintf("(%04X, X=$%02X)", cast(u16)adr_decoded.(AdrZpgIndirect).addr|ZPG_START, adr_decoded.(AdrZpgIndirect).inner_offs)
+      return fmt.aprintf("(%04X, X=$%02X)", cast(u16)adr_decoded.(Adr_Zpg_Indirect).addr|ZPG_START, adr_decoded.(Adr_Zpg_Indirect).inner_offs)
     case .Ziy:
-      return fmt.aprintf("(%04X), Y=$%02X", cast(u16)adr_decoded.(AdrZpgIndirect).addr|ZPG_START, adr_decoded.(AdrZpgIndirect).outer_offs)
+      return fmt.aprintf("(%04X), Y=$%02X", cast(u16)adr_decoded.(Adr_Zpg_Indirect).addr|ZPG_START, adr_decoded.(Adr_Zpg_Indirect).outer_offs)
     case .Zpr:
-      return fmt.aprintf("%04X, %+d", adr_decoded.(AdrBasicRel).addr, adr_decoded.(AdrBasicRel).rel)
+      return fmt.aprintf("%04X, %+d", adr_decoded.(Adr_Basic_Rel).addr, adr_decoded.(Adr_Basic_Rel).rel)
     case .Izp:
-      return fmt.aprintf("$%02X + %04X", adr_decoded.(AdrImmZpg).imm, cast(u16)adr_decoded.(AdrImmZpg).addr|ZPG_START)
+      return fmt.aprintf("$%02X + %04X", adr_decoded.(Adr_Imm_Zpg).imm, cast(u16)adr_decoded.(Adr_Imm_Zpg).addr|ZPG_START)
     case .Iab:
-      return fmt.aprintf("$%02X + %04X", adr_decoded.(AdrImmBasic).imm, adr_decoded.(AdrImmBasic).addr)
+      return fmt.aprintf("$%02X + %04X", adr_decoded.(Adr_Imm_Basic).imm, adr_decoded.(Adr_Imm_Basic).addr)
     case .Izx:
-      return fmt.aprintf("$%02X + %04X, X=%02X", adr_decoded.(AdrImmZpg).imm, cast(u16)adr_decoded.(AdrImmZpg).addr|ZPG_START, adr_decoded.(AdrImmBasic).offs)
+      return fmt.aprintf("$%02X + %04X, X=%02X", adr_decoded.(Adr_Imm_Zpg).imm, cast(u16)adr_decoded.(Adr_Imm_Zpg).addr|ZPG_START, adr_decoded.(Adr_Imm_Basic).offs)
     case .Iax:
-      return fmt.aprintf("$%02X + %04X, X=%02X", adr_decoded.(AdrImmBasic).imm, adr_decoded.(AdrImmBasic).addr, adr_decoded.(AdrImmBasic).offs)
+      return fmt.aprintf("$%02X + %04X, X=%02X", adr_decoded.(Adr_Imm_Basic).imm, adr_decoded.(Adr_Imm_Basic).addr, adr_decoded.(Adr_Imm_Basic).offs)
     case:
       return "???"
   }
@@ -68,7 +68,7 @@ log_instr_info :: proc(fmt_arg: string, args: ..any, no_log: bool = false) {
   }
 }
 
-trace_instr :: proc(cpu: ^Cpu, opc: u8, pc: u16, opc_info: OpcInfo, adr_decoded: AdrDecoded, stdout := false) {
+trace_instr :: proc(cpu: ^Cpu, opc: u8, pc: u16, opc_info: Opc_Info, adr_decoded: Adr_Decoded, stdout := false) {
   when #config(ENABLE_TRACING, false) {
     if !is_tracing_enabled { return }
     context.allocator = context.temp_allocator

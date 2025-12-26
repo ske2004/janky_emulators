@@ -13,17 +13,17 @@ VceFreq :: enum {
   Mhz7,
 }
 
-VceCtrl :: bit_field u16 {
+Vce_Ctrl :: bit_field u16 {
   freq: VceFreq | 1,
 }
 
 Vce :: struct {
   pal: [0x200]Rgb333,
   pal_index: u16,
-  ctrl: VceCtrl,
+  ctrl: Vce_Ctrl,
 }
 
-vce_read :: proc(using vce: ^Vce, addr: VceAddrs) -> u8 {
+vce_read :: proc(using vce: ^Vce, addr: Vce_Addrs) -> u8 {
   switch addr {
   case .Ctrl_lo: return cast(u8)vce.ctrl
   case .Ctrl_hi: return 0
@@ -42,9 +42,9 @@ vce_read :: proc(using vce: ^Vce, addr: VceAddrs) -> u8 {
 }
 
 
-vce_write :: proc(using vce: ^Vce, addr: VceAddrs, val: u8) {
+vce_write :: proc(using vce: ^Vce, addr: Vce_Addrs, val: u8) {
   switch addr {
-  case .Ctrl_lo: vce.ctrl = cast(VceCtrl)val
+  case .Ctrl_lo: vce.ctrl = cast(Vce_Ctrl)val
   case .Ctrl_hi: return
   case .PalSelect_lo: pal_index = (pal_index&0x100) | cast(u16)val
   case .PalSelect_hi: pal_index = (pal_index&0xFF) | (((cast(u16)val)<<8)&0x100)

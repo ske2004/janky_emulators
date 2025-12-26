@@ -7,7 +7,7 @@ Timer :: struct {
   clocks: uint,
 }
 
-timer_read :: proc(bus: ^Bus, using timer: ^Timer, addr: TimerAddrs) -> u8 {
+timer_read :: proc(bus: ^Bus, using timer: ^Timer, addr: Timer_Addrs) -> u8 {
   switch addr {
   case .ReloadVal: return (reload&0x7F)|(bus.io_byte&0x80) 
   case .Enable:    return (u8(enabled)&0x01)|(bus.io_byte&0xFE)
@@ -15,7 +15,7 @@ timer_read :: proc(bus: ^Bus, using timer: ^Timer, addr: TimerAddrs) -> u8 {
   unreachable()
 }
 
-timer_write :: proc(bus: ^Bus, using timer: ^Timer, addr: TimerAddrs, val: u8) {
+timer_write :: proc(bus: ^Bus, using timer: ^Timer, addr: Timer_Addrs, val: u8) {
   switch addr {
   case .ReloadVal: reload = val&0x7F // +1 added later!!!
   case .Enable:    enabled = bool(val&1)

@@ -24,7 +24,7 @@ Instr :: enum {
 }
 
 @(private="file")
-hand_opcode_table := [256]OpcInfo{
+hand_opcode_table := [256]Opc_Info{
   0x00 = {.BRK,.Imp,8,0},
   0x01 = {.ORA,.Zxi,7,0},
   0x02 = {.SXY,.Imp,3,0},
@@ -227,7 +227,7 @@ hand_opcode_table := [256]OpcInfo{
   0xFE = {.INC,.Abx,7,0},
 }
 
-init_opcode :: proc(opc: u8) -> OpcInfo {
+init_opcode :: proc(opc: u8) -> Opc_Info {
   hi, lo := opc>>4, opc&0xF
   if lo == 0xF {
     if hi >= 0x0 && hi <= 0x7 do return {.BBR,.Zpr,6,hi-0x0}
@@ -240,7 +240,7 @@ init_opcode :: proc(opc: u8) -> OpcInfo {
   return hand_opcode_table[opc] 
 }
 
-init_opcode_table :: proc() -> (opcodes: [256]OpcInfo) {
+init_opcode_table :: proc() -> (opcodes: [256]Opc_Info) {
   for i in 0..<256 do opcodes[i] = init_opcode(cast(u8)i)
   return
 }

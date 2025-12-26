@@ -8,7 +8,7 @@ Irq :: enum u8 {
   Timer,
 }
 
-IrqReg :: bit_field u8 {
+Irq_Reg :: bit_field u8 {
   irq2: bool  | 1,
   irq1: bool  | 1, 
   timer: bool | 1, 
@@ -20,8 +20,8 @@ Bus :: struct {
   save_ram: [0x2000]u8,
   clocks: uint,
 
-  irq_pending: IrqReg,
-  irq_disable: IrqReg,
+  irq_pending: Irq_Reg,
+  irq_disable: Irq_Reg,
 
   io_byte: u8,
 
@@ -95,7 +95,7 @@ bus_cycle :: proc(bus: ^Bus) {
 bus_irq :: proc(bus: ^Bus, irq: Irq) {
   bit := cast(u8)1<<irq
   if (cast(u8)bus.irq_disable & bit) == 0 {
-    bus.irq_pending |= transmute(IrqReg)bit
+    bus.irq_pending |= transmute(Irq_Reg)bit
   }
 }
 

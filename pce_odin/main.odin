@@ -88,7 +88,7 @@ main :: proc() {
     if !raylib.IsFontValid(font) {
       font = raylib.GetFontDefault()
     }
-
+    
     raylib.SetTargetFPS(60)
 
     screen := raylib.GenImageColor(256, 224, raylib.WHITE)

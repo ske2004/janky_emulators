@@ -4,7 +4,7 @@ import "core:mem"
 import "core:fmt"
 import "core:container/small_array"
 
-VdcReg :: enum {
+Vdc_Reg :: enum {
   Mawr    = 0x00, // VDC memory write
   Marr    = 0x01, // VDC memory read
   Vrw     = 0x02, // VRAM read/write
@@ -27,7 +27,12 @@ VdcReg :: enum {
   Dmaspr  = 0x13,
 }
 
-VramSpriteFlags :: bit_field u16 {
+Vdc_Dma_State :: enum {
+  R_Src,
+  W_Dst,
+}
+
+Vram_Sprite_Flags :: bit_field u16 {
   pal:        uint | 4,
   padding1:   uint | 3,
   foreground: bool | 1,
@@ -39,14 +44,14 @@ VramSpriteFlags :: bit_field u16 {
   yflip:      bool | 1, 
 }
 
-VramSprite :: struct #packed {
+Vram_Sprite :: struct #packed {
   y: u16,
   x: u16,
   tile: u16,
-  flags: VramSpriteFlags,
+  flags: Vram_Sprite_Flags,
 }
 
-VdcStatus :: bit_field u8 {
+Vdc_Status :: bit_field u8 {
   spr_coll_happen: bool | 1,
   spr_ovfw_happen: bool | 1,
   scanline_happen: bool | 1,
@@ -55,7 +60,7 @@ VdcStatus :: bit_field u8 {
   vblank_happen: bool | 1,
 }
 
-VdcCr :: bit_field u16 {
+Vdc_Cr :: bit_field u16 {
   spr_coll_int: bool | 1,
   spr_ovfw_int: bool | 1,
   scanline_int: bool | 1,
@@ -67,20 +72,20 @@ VdcCr :: bit_field u16 {
   rw_increment: u8   | 2,
 }
 
-DmaAction :: enum {
+Vdc_Dma_Action :: enum {
   Inc = 0,
   Dec = 1,
 }
 
-VdcDmactrl :: bit_field u16 {
+Vdc_Dma_Ctrl :: bit_field u16 {
   vram_to_satb_int: bool | 1, 
   vram_to_vram_int: bool | 1, 
-  src_action: DmaAction | 1, 
-  dst_action: DmaAction | 1, 
+  src_action: Vdc_Dma_Action | 1, 
+  dst_action: Vdc_Dma_Action | 1, 
   satb_dma_auto:    bool | 1, // every vblank
 }
 
-VdcMwr :: bit_field u16 {
+Vdc_Mwr :: bit_field u16 {
   padding0:  uint | 4,
   tmap_size: uint | 3,
 }
@@ -104,46 +109,46 @@ Vram :: struct {
 Vdc :: struct {
   vram: Vram,
 
-  status: VdcStatus,
+  status: Vdc_Status,
 
   mawr: u16,
   marr: u16,
-  cr: VdcCr,
+  cr: Vdc_Cr,
   rcr: u16,
   scroll_x: u16,
   scroll_y: u16,
-  dmactrl: VdcDmactrl,
+  dmactrl: Vdc_Dma_Ctrl,
   dmasrc: u16,
   dmadst: u16,
   dmalen: u16,
   dmaspr: u16, // satb source addr
-  mwr: VdcMwr,
+  mwr: Vdc_Mwr,
 
   satb_dma_next_vblank: bool,
 
   commit_vblank_dma_in_clocks: int,
   commit_vblank_satb_dma_in_clocks: int,
 
-  reg_selected: VdcReg,
+  reg_selected: Vdc_Reg,
 
   x, y: int,
   ty: u16,
 }
 
-vram_sprite_dims :: proc(spr: VramSprite) -> (uint, uint) {
+vram_sprite_dims :: proc(spr: Vram_Sprite) -> (uint, uint) {
   sizes := [4]uint{16, 32, 64, 64}
   return sizes[spr.flags.xsize], sizes[spr.flags.ysize]
 }
 
-vram_sprite_size :: proc(spr: VramSprite) -> (uint, uint) {
+vram_sprite_size :: proc(spr: Vram_Sprite) -> (uint, uint) {
   sizes := [4]uint{1, 2, 4, 4}
   return sizes[spr.flags.xsize], sizes[spr.flags.ysize]
 }
 
-vram_get_sprite :: proc(vram: ^Vram, i: uint) -> ^VramSprite {
+vram_get_sprite :: proc(vram: ^Vram, i: uint) -> ^Vram_Sprite {
   assert(i < 64)
   raw := uintptr(&vram.satb)
-  return cast(^VramSprite)(raw+cast(uintptr)(i*size_of(VramSprite)))
+  return cast(^Vram_Sprite)(raw+cast(uintptr)(i*size_of(Vram_Sprite)))
 }
 
 vdc_rw_increment :: proc(vdc: ^Vdc) -> u16 {
@@ -206,7 +211,7 @@ vdc_dma_transfer :: proc(bus: ^Bus, vdc: ^Vdc) {
   vdc.commit_vblank_dma_in_clocks = cast(int)len
 }
 
-draw_sprite_strip :: proc(bus: ^Bus, vdc: ^Vdc, sprites: []VramSprite, y: int, fg: bool) {
+draw_sprite_strip :: proc(bus: ^Bus, vdc: ^Vdc, sprites: []Vram_Sprite, y: int, fg: bool) {
   if !vdc.cr.spr_enable {
     return
   }
@@ -248,7 +253,7 @@ draw_sprite_strip :: proc(bus: ^Bus, vdc: ^Vdc, sprites: []VramSprite, y: int, f
 }
 
 vdc_draw_scanline :: proc(bus: ^Bus, vdc: ^Vdc, y: int) {
-  sprites: small_array.Small_Array(16, VramSprite)
+  sprites: small_array.Small_Array(16, Vram_Sprite)
 
   for i in 0..<256 {
     bus.screen[i+y*256] = bus.vce.pal[0]
@@ -369,7 +374,7 @@ vdc_cycle :: proc(bus: ^Bus, using vdc: ^Vdc) {
   }
 }
 
-vdc_write_reg :: proc(vdc: ^Vdc, reg: VdcReg, val: u16, no_sideffect: bool) {
+vdc_write_reg :: proc(vdc: ^Vdc, reg: Vdc_Reg, val: u16, no_sideffect: bool) {
   log_instr_info("vdc write reg: %v %04X (%s)", reg, val, no_sideffect ? "low" : "high")
 
   switch reg {
@@ -377,14 +382,14 @@ vdc_write_reg :: proc(vdc: ^Vdc, reg: VdcReg, val: u16, no_sideffect: bool) {
   case .Marr: vdc.marr = val&0x7FFF
   case .Vrw: panic("vrw write is special")
   case .Unused0, .Unused1:
-  case .Cr: vdc.cr = cast(VdcCr)val; log.warnf("todo: vdc cr")
+  case .Cr: vdc.cr = cast(Vdc_Cr)val; log.warnf("todo: vdc cr")
   case .Rcr: vdc.rcr = val&0x1FF
   case .Scrollx: vdc.scroll_x = val&0x3FF
   case .Scrolly: vdc.scroll_y = val&0x1FF; vdc.ty = val&0x1FF
-  case .Mwr:  vdc.mwr = cast(VdcMwr)val
+  case .Mwr:  vdc.mwr = cast(Vdc_Mwr)val
   case .Hsync, .Hdisp, .Vsync, .Vdisp, .Vend:
     log.warnf("todo: vdc sync register write")
-  case .Dmactrl: vdc.dmactrl = cast(VdcDmactrl)val
+  case .Dmactrl: vdc.dmactrl = cast(Vdc_Dma_Ctrl)val
   case .Dmasrc: vdc.dmasrc = val 
   case .Dmadst: vdc.dmadst = val
   case .Dmalen: vdc.dmalen = val
@@ -392,7 +397,7 @@ vdc_write_reg :: proc(vdc: ^Vdc, reg: VdcReg, val: u16, no_sideffect: bool) {
   }
 }
 
-vdc_read_reg :: proc(vdc: ^Vdc, reg: VdcReg, no_sideffect: bool, no_log: bool = false) -> (ret: u16) {
+vdc_read_reg :: proc(vdc: ^Vdc, reg: Vdc_Reg, no_sideffect: bool, no_log: bool = false) -> (ret: u16) {
   switch reg {
   case .Mawr: ret = vdc.mawr
   case .Marr: ret = vdc.marr
@@ -422,9 +427,9 @@ vdc_read_reg :: proc(vdc: ^Vdc, reg: VdcReg, no_sideffect: bool, no_log: bool = 
   return
 }
 
-vdc_write :: proc(bus: ^Bus, vdc: ^Vdc, addr: VdcAddrs, val: u8) {
+vdc_write :: proc(bus: ^Bus, vdc: ^Vdc, addr: Vdc_Addrs, val: u8) {
   switch addr {
-  case .Ctrl: vdc.reg_selected = cast(VdcReg)(val & 0x1F); if val > 19 do log.warnf("invalid reg selected %d", val)
+  case .Ctrl: vdc.reg_selected = cast(Vdc_Reg)(val & 0x1F); if val > 19 do log.warnf("invalid reg selected %d", val)
   case .Unknown1:
   case .Data_lo:
     if vdc.reg_selected == .Vrw {
@@ -447,9 +452,9 @@ vdc_write :: proc(bus: ^Bus, vdc: ^Vdc, addr: VdcAddrs, val: u8) {
   }
 }
 
-vdc_read :: proc(bus: ^Bus, vdc: ^Vdc, addr: VdcAddrs) -> (ret: u8) {
+vdc_read :: proc(bus: ^Bus, vdc: ^Vdc, addr: Vdc_Addrs) -> (ret: u8) {
   switch addr {
-  case .Ctrl: ret = cast(u8)vdc.status; vdc.status = cast(VdcStatus)0
+  case .Ctrl: ret = cast(u8)vdc.status; vdc.status = cast(Vdc_Status)0
   case .Unknown1:
   case .Data_lo: ret = cast(u8)(vdc_read_reg(vdc, vdc.reg_selected, true)&0xFF)
   case .Data_hi:
