@@ -8,7 +8,7 @@ BlockTransferOp :: enum {
   NONE,
   INC,
   DEC,
-  INCDEC
+  INCDEC,
 }
 
 BlockTransferReg :: struct {
@@ -187,12 +187,12 @@ cpu_set_nz :: #force_inline proc(cpu: ^Cpu, value: u8) {
 @(no_instrumentation) 
 update_block_transfer_reg :: #force_inline proc(reg: ^BlockTransferReg) {
   switch reg.op {
-    case .NONE:
-    case .INC: reg.value += 1
-    case .DEC: reg.value -= 1
-    case .INCDEC: if reg.state { reg.value -= 1 }
-                  else { reg.value += 1 }
-                  reg.state = !reg.state
+  case .NONE:
+  case .INC: reg.value += 1
+  case .DEC: reg.value -= 1
+  case .INCDEC: if reg.state { reg.value -= 1 }
+                else { reg.value += 1 }
+                reg.state = !reg.state
   }
 }
 
@@ -202,23 +202,20 @@ block_transfer :: proc(cpu: ^Cpu, srcop, dstop: BlockTransferOp) {
   dst := BlockTransferReg{dstop, cpu_read_pc_u16(cpu), false}
   len := cpu_read_pc_u16(cpu)
  
-  log_instr_info("BLK src=%s dst=%s: src:%04X (%06X), dst:%04X, len:%04X", srcop, dstop, src.value, cpu_mem_map(cpu, src.value), dst.value, len);
+  log_instr_info("BLK src=%s dst=%s: src:%04X (%06X), dst:%04X, len:%04X", srcop, dstop, src.value, cpu_mem_map(cpu, src.value), dst.value, len)
 
   cpu_stk_push_u8(cpu, cpu.y)
   cpu_stk_push_u8(cpu, cpu.a)
   cpu_stk_write_u8(cpu, cpu.x)
 
   clock_tran_start := cpu.bus.clocks
-
-  cpu_write_u8(cpu, dst.value, cpu_read_u8(cpu, src.value))
-  update_block_transfer_reg(&src)
-  update_block_transfer_reg(&dst)
-  len -= 1
-  for len > 0 {
+  
+  for {
     cpu_write_u8(cpu, dst.value, cpu_read_u8(cpu, src.value))
     update_block_transfer_reg(&src)
     update_block_transfer_reg(&dst)
     len -= 1
+    if len <= 0 do break
   }
   
   clock_tran_end := cpu.bus.clocks
@@ -227,9 +224,9 @@ block_transfer :: proc(cpu: ^Cpu, srcop, dstop: BlockTransferOp) {
   cpu.a = cpu_stk_pop_u8(cpu)
   cpu.y = cpu_stk_pop_u8(cpu)
 
-  cyc_total := cpu.bus.clocks-clock_start;
-  cyc_tran := clock_tran_end-clock_tran_start;
-  cyc_notran := cyc_total-cyc_tran+1; // account for opc cycle
+  cyc_total := cpu.bus.clocks-clock_start
+  cyc_tran := clock_tran_end-clock_tran_start
+  cyc_notran := cyc_total-cyc_tran+1 // account for opc cycle
 
   log_instr_info("BLK: cyctot:%d, cyctrn:%d, cycntr:%d", cyc_total, cyc_tran, cyc_notran)
 }
@@ -265,6 +262,6 @@ cpu_init :: proc(bus: ^Bus) -> Cpu {
     p = {int = true, brk = true},
     pc = cast(u16)bus.rom[0x1FFE] | cast(u16)bus.rom[0x1FFF]<<8,
     opc_tbl = init_opcode_table(),
-    bus = bus
+    bus = bus,
   }
 }

@@ -14,13 +14,13 @@ VceFreq :: enum {
 }
 
 VceCtrl :: bit_field u16 {
-  freq: VceFreq | 1
+  freq: VceFreq | 1,
 }
 
 Vce :: struct {
   pal: [0x200]Rgb333,
   pal_index: u16,
-  ctrl: VceCtrl
+  ctrl: VceCtrl,
 }
 
 vce_read :: proc(using vce: ^Vce, addr: VceAddrs) -> u8 {

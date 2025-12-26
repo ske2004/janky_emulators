@@ -1,3 +1,4 @@
+#+feature dynamic-literals
 package main
 
 import "core:os"
@@ -68,7 +69,7 @@ main :: proc() {
   bus := bus_init(rom)
   cpu := cpu_init(&bus)
 
-  log.infof("rom size: %v", len(rom))
+  fmt.printf("rom size: %x", len(rom))
   log.infof("cpu: pc=%04X", cpu.pc)
 
   when #config(HEADLESS, false) {
@@ -79,8 +80,14 @@ main :: proc() {
   } else {
     raylib.SetTraceLogLevel(.ERROR)
 
-    raylib.InitWindow(256*3, 224*3, "pcPÒW")
+    raylib.InitWindow(256*3+520, 224*3, "pcPÒW")
     defer raylib.CloseWindow()
+
+    mem_scroll := 0
+    font := raylib.LoadFontEx("C:\\WINDOWS\\FONTS\\LUCON.TTF", 20, nil, 0)
+    if !raylib.IsFontValid(font) {
+      font = raylib.GetFontDefault()
+    }
 
     raylib.SetTargetFPS(60)
 
@@ -114,6 +121,7 @@ main :: proc() {
       diff := time.now()._nsec - start._nsec
 
       raylib.BeginDrawing()
+      raylib.ClearBackground(raylib.BLACK)
 
       pixels := cast([^]u8)screen.data
       pixels_i := 0
@@ -128,8 +136,44 @@ main :: proc() {
       texture := raylib.LoadTextureFromImage(screen)
       defer raylib.UnloadTexture(texture)
 
-      raylib.DrawTextureEx(texture, {0, 0}, 0, 3, raylib.WHITE)
-      raylib.DrawText(fmt.caprintf("FPS: %v\nFRAME: %v\nTIME: %v", raylib.GetFPS(), frame, diff, allocator = context.temp_allocator), 0, 0, 20, raylib.RED) 
+      raylib.DrawTextureEx(texture, {520, 0}, 0, 3, raylib.WHITE)
+      raylib.DrawTextEx(
+        font,
+        fmt.caprintf("FPS: %v\nFRAME: %v\nTIME: %v", raylib.GetFPS(), frame, diff, allocator = context.temp_allocator),
+        {0, 0},
+        20,
+        0,
+        raylib.RED,
+      ) 
+
+      start_x := 10
+      start_y := 200
+
+      mem_scroll -= cast(int)(raylib.GetMouseWheelMove()) * (raylib.IsKeyDown(.LEFT_SHIFT) ? 8 : 0)
+
+      for i in 0..<16 {
+        offs := (i+mem_scroll)*8
+
+        raylib.DrawTextEx(
+          font, 
+          fmt.caprintf("%04X", offs, allocator = context.temp_allocator),
+          {f32(start_x), f32(i*20+start_y)},
+          20,
+          0,
+          raylib.GRAY,
+        )
+
+        for x in 0..<8 {
+          raylib.DrawTextEx(
+            font, 
+            fmt.caprintf("%04X", bus.vdc.vram.vram[offs+x], allocator = context.temp_allocator),
+            {f32(x*55+start_x+55), f32(i*20+start_y)},
+            20,
+            0,
+            raylib.BLUE,
+          )
+        }
+      }
 
       if raylib.IsKeyDown(.ONE) {
         for i in 0..<0x200 {
@@ -155,27 +199,29 @@ main :: proc() {
 
           raylib.DrawRectangleLinesEx(
             {
-              cast(f32)sprite.x*3-32*3,
+              cast(f32)sprite.x*3-32*3+520,
               cast(f32)sprite.y*3-64*3,
               cast(f32)w*3,
               cast(f32)h*3,
             },
             3,
-            raylib.WHITE
+            raylib.WHITE,
           )
 
           raylib.DrawRectangleLinesEx(
             {
-              cast(f32)sprite.x*3-32*3,
+              cast(f32)sprite.x*3-32*3+520,
               cast(f32)sprite.y*3-64*3,
               cast(f32)w*3,
               cast(f32)h*3,
             },
             1,
-            raylib.BLACK
+            raylib.BLACK,
           )
         }
       }
+
+
 
       raylib.EndDrawing()
 

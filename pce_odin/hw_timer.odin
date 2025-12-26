@@ -4,7 +4,7 @@ Timer :: struct {
   enabled: bool,
   reload: u8,
   counter: u8,
-  clocks: uint
+  clocks: uint,
 }
 
 timer_read :: proc(bus: ^Bus, using timer: ^Timer, addr: TimerAddrs) -> u8 {

@@ -24,23 +24,23 @@ VceAddrs :: enum {
 }
 
 PsgAddrs :: enum {
-  Dummy // todo
+  Dummy, // todo
 }
 
 TimerAddrs :: enum {
   ReloadVal = 0,
-  Enable    = 1
+  Enable    = 1,
 }
 
 JoyAddrs :: enum {
-  Port 
+  Port,
 }
 
 IctlAddrs :: enum {
   Unknown0 = 0,
   Unknown1 = 1,
   Enabled  = 2,
-  Pending  = 3
+  Pending  = 3,
 }
 
 HwpageDst :: union {
@@ -68,7 +68,7 @@ hwpage_read :: proc(bus: ^Bus, addr: u16) -> u8 {
   switch v in hwpage_map(addr) {
   case VdcAddrs:   return vdc_read(bus, &bus.vdc, v)
   case VceAddrs:   return vce_read(&bus.vce, v)
-  case PsgAddrs:   log.warnf("psg read: %04X", addr)
+  case PsgAddrs:   return 0x00
   case TimerAddrs: return timer_read(bus, &bus.timer, v)
   case JoyAddrs:   return joy_read(&bus.joy)
   case IctlAddrs:  return ictl_read(bus, v)

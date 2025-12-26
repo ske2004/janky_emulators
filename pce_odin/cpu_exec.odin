@@ -74,7 +74,7 @@ cpu_exec_instr :: proc(cpu: ^Cpu) {
     cpu_dummy_read(cpu)
     cpu.sp = cpu.x
   case .STZ:
-    adr_mode_write_u8(cpu, adr, 0);
+    adr_mode_write_u8(cpu, adr, 0)
   case .TAM:
     mask := cpu_read_pc_u8(cpu)
     log_instr_info("TAM: %02X=%02X", mask, cpu.a)

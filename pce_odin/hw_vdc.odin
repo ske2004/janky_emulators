@@ -52,7 +52,7 @@ VdcStatus :: bit_field u8 {
   scanline_happen: bool | 1,
   vram_to_satb_end: bool | 1,
   vram_dma_end: bool | 1,
-  vblank_happen: bool | 1
+  vblank_happen: bool | 1,
 }
 
 VdcCr :: bit_field u16 {
@@ -121,6 +121,9 @@ Vdc :: struct {
 
   satb_dma_next_vblank: bool,
 
+  commit_vblank_dma_in_clocks: int,
+  commit_vblank_satb_dma_in_clocks: int,
+
   reg_selected: VdcReg,
 
   x, y: int,
@@ -174,6 +177,9 @@ draw_sprite_tile_strip :: proc(bus: ^Bus, vdc: ^Vdc, px, py: int, pal: uint, tad
 
 vdc_dma_transfer :: proc(bus: ^Bus, vdc: ^Vdc) {
   fmt.printf("DMA!\n")
+
+  len := vdc.dmalen
+
   vdc.dmalen -= 1
   vdc.vram.vram[vdc.dmadst] = vdc.vram.vram[vdc.dmasrc]
   switch vdc.dmactrl.src_action {
@@ -196,10 +202,8 @@ vdc_dma_transfer :: proc(bus: ^Bus, vdc: ^Vdc) {
     }
     vdc.dmalen -= 1
   }
-  if vdc.dmactrl.vram_to_vram_int {
-    vdc.status.vram_dma_end = true
-    bus_irq(bus, .Irq1)
-  }
+
+  vdc.commit_vblank_dma_in_clocks = cast(int)len
 }
 
 draw_sprite_strip :: proc(bus: ^Bus, vdc: ^Vdc, sprites: []VramSprite, y: int, fg: bool) {
@@ -215,15 +219,29 @@ draw_sprite_strip :: proc(bus: ^Bus, vdc: ^Vdc, sprites: []VramSprite, y: int, f
       w, h := vram_sprite_size(spr)
       pal := spr.flags.pal*16
       taddr := cast(uint)spr.tile<<5
+      
+      yy := tile_y
+      if spr.flags.yflip {
+        yy = (h-1)-tile_y
+        sub_y = 15-sub_y
+      }
 
       for x in 0..<w {
         xx := x
-
         if spr.flags.xflip {
           xx = (w-1)-x
         }
 
-        draw_sprite_tile_strip(bus, vdc, px+cast(int)x*16, py+cast(int)tile_y*16, pal, taddr+tile_y*128+xx*64, sub_y, spr.flags.xflip)
+        draw_sprite_tile_strip(
+          bus   = bus,
+          vdc   = vdc,
+          px    = px+cast(int)x*16,
+          py    = py+cast(int)tile_y*16,
+          pal   = pal,
+          taddr = (taddr+yy*128+xx*64)&0x7FFF,
+          sub_y = sub_y,
+          flip  = spr.flags.xflip,
+        )
       }
     }
   }
@@ -281,11 +299,36 @@ vdc_draw_scanline :: proc(bus: ^Bus, vdc: ^Vdc, y: int) {
 vdc_cyc := 0
 
 vdc_cycle :: proc(bus: ^Bus, using vdc: ^Vdc) {
-  vdc_cyc += 4
+  test := [1+2]int{}
+
+  vdc_cyc += 3
 
   // TODO: temporary
   if vdc_cyc >= 4 {
     vdc_cyc -= 4
+
+    if vdc.commit_vblank_satb_dma_in_clocks > 0 {
+      vdc.commit_vblank_satb_dma_in_clocks -= 1
+
+      if vdc.commit_vblank_satb_dma_in_clocks == 0 {
+        vdc.status.vram_to_satb_end = true
+        if vdc.dmactrl.vram_to_satb_int {
+          bus_irq(bus, .Irq1)
+        }
+      }
+    }
+
+    if vdc.commit_vblank_dma_in_clocks > 0 {
+      vdc.commit_vblank_dma_in_clocks -= 1
+
+      if vdc.commit_vblank_dma_in_clocks == 0 {
+        vdc.status.vram_dma_end = true
+        fmt.println("Vblank DMA done!")
+        if vdc.dmactrl.vram_to_vram_int {
+          bus_irq(bus, .Irq1)
+        }
+      }
+    }
 
     x += 1
     if x == 342 {
@@ -320,10 +363,7 @@ vdc_cycle :: proc(bus: ^Bus, using vdc: ^Vdc) {
         // TODO: what if it overflows vram addr?
         mem.copy(&vram.satb, &vram.vram[dmaspr], size_of(vram.satb))
         satb_dma_next_vblank = false
-        if vdc.dmactrl.vram_to_satb_int {
-          vdc.status.vram_to_satb_end = true
-          bus_irq(bus, .Irq1)
-        }
+        vdc.commit_vblank_satb_dma_in_clocks = 0x100
       }
     }
   }
@@ -348,7 +388,7 @@ vdc_write_reg :: proc(vdc: ^Vdc, reg: VdcReg, val: u16, no_sideffect: bool) {
   case .Dmasrc: vdc.dmasrc = val 
   case .Dmadst: vdc.dmadst = val
   case .Dmalen: vdc.dmalen = val
-  case .Dmaspr: vdc.dmaspr = val; vdc.satb_dma_next_vblank = true;
+  case .Dmaspr: vdc.dmaspr = val; vdc.satb_dma_next_vblank = true
   }
 }
 
