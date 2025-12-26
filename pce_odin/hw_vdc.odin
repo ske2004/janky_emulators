@@ -1,4 +1,5 @@
 package main
+
 import "core:log"
 import "core:mem"
 import "core:fmt"
@@ -28,8 +29,9 @@ VDC_Reg :: enum {
 }
 
 VDC_DMA_State :: enum {
-  R_Src,
-  W_Dst,
+  None,
+  Read_Src,
+  Write_Dst,
 }
 
 VRAM_Sprite_Flags :: bit_field u16 {
@@ -126,10 +128,12 @@ VDC :: struct {
 
   satb_dma_next_vblank: bool,
 
-  commit_vblank_dma_in_clocks: int,
   commit_vblank_satb_dma_in_clocks: int,
 
   reg_selected: VDC_Reg,
+
+  dma_state: VDC_DMA_State,
+  dma_buf: u16,
 
   x, y: int,
   ty: u16,
@@ -178,37 +182,6 @@ draw_sprite_tile_strip :: proc(bus: ^Bus, vdc: ^VDC, px, py: int, pal: uint, tad
       plot_dot(bus, int(x)+px, int(sub_y)+py, color) 
     }
   }
-}
-
-vdc_dma_transfer :: proc(bus: ^Bus, vdc: ^VDC) {
-  fmt.printf("DMA!\n")
-
-  len := vdc.dmalen
-
-  vdc.dmalen -= 1
-  vdc.vram.vram[vdc.dmadst] = vdc.vram.vram[vdc.dmasrc]
-  switch vdc.dmactrl.src_action {
-  case .Inc: vdc.dmasrc += 1
-  case .Dec: vdc.dmasrc -= 1
-  }
-  switch vdc.dmactrl.dst_action {
-  case .Inc: vdc.dmadst += 1
-  case .Dec: vdc.dmadst -= 1
-  }
-  for vdc.dmalen > 0 {
-    vdc.vram.vram[vdc.dmadst] = vdc.vram.vram[vdc.dmasrc]
-    switch vdc.dmactrl.src_action {
-    case .Inc: vdc.dmasrc += 1
-    case .Dec: vdc.dmasrc -= 1
-    }
-    switch vdc.dmactrl.dst_action {
-    case .Inc: vdc.dmadst += 1
-    case .Dec: vdc.dmadst -= 1
-    }
-    vdc.dmalen -= 1
-  }
-
-  vdc.commit_vblank_dma_in_clocks = cast(int)len
 }
 
 draw_sprite_strip :: proc(bus: ^Bus, vdc: ^VDC, sprites: []VRAM_Sprite, y: int, fg: bool) {
@@ -312,24 +285,40 @@ vdc_cycle :: proc(bus: ^Bus, using vdc: ^VDC) {
   if vdc_cyc >= 4 {
     vdc_cyc -= 4
 
+    switch vdc.dma_state {
+    case .None:
+    case .Read_Src:
+      vdc.dmalen -= 1
+      vdc.dma_buf = vdc.vram.vram[vdc.dmasrc]
+      switch vdc.dmactrl.src_action {
+      case .Inc: vdc.dmasrc += 1
+      case .Dec: vdc.dmasrc -= 1
+      }
+      vdc.dma_state = .Write_Dst
+    case .Write_Dst:
+      vdc.vram.vram[vdc.dmadst] = vdc.dma_buf
+      switch vdc.dmactrl.dst_action {
+      case .Inc: vdc.dmadst += 1
+      case .Dec: vdc.dmadst -= 1
+      }
+      vdc.dma_state = .Read_Src
+
+      if vdc.dmalen == 0 {
+        vdc.dma_state = .None
+
+        vdc.status.vram_dma_end = true
+        if vdc.dmactrl.vram_to_vram_int {
+          bus_irq(bus, .IRQ1)
+        }
+      }
+    }
+
     if vdc.commit_vblank_satb_dma_in_clocks > 0 {
       vdc.commit_vblank_satb_dma_in_clocks -= 1
 
       if vdc.commit_vblank_satb_dma_in_clocks == 0 {
         vdc.status.vram_to_satb_end = true
         if vdc.dmactrl.vram_to_satb_int {
-          bus_irq(bus, .IRQ1)
-        }
-      }
-    }
-
-    if vdc.commit_vblank_dma_in_clocks > 0 {
-      vdc.commit_vblank_dma_in_clocks -= 1
-
-      if vdc.commit_vblank_dma_in_clocks == 0 {
-        vdc.status.vram_dma_end = true
-        fmt.println("Vblank DMA done!")
-        if vdc.dmactrl.vram_to_vram_int {
           bus_irq(bus, .IRQ1)
         }
       }
@@ -446,7 +435,8 @@ vdc_write :: proc(bus: ^Bus, vdc: ^VDC, addr: VDC_Addrs, val: u8) {
     } else {
       vdc_write_reg(vdc, vdc.reg_selected, (vdc_read_reg(vdc, vdc.reg_selected, true, no_log=true)&0xFF)|(cast(u16)val << 8), false)
       if vdc.reg_selected == .DMAlen {
-        vdc_dma_transfer(bus, vdc)
+        fmt.printf("DMA!\n")
+        vdc.dma_state = .Read_Src
       }
     }
   }

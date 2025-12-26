@@ -8,13 +8,13 @@ RGB333 :: bit_field u16 {
   g: uint | 3,
 }
 
-VCEFreq :: enum {
+VCE_Freq :: enum {
   Mhz5,
   Mhz7,
 }
 
 VCE_Ctrl :: bit_field u16 {
-  freq: VCEFreq | 1,
+  freq: VCE_Freq | 1,
 }
 
 VCE :: struct {

@@ -1,11 +1,11 @@
 @echo off
 
-set ROM_NAME="P:\ROMS\Bonk's Adventure (USA).pce"
+rem set ROM_NAME="P:\ROMS\Bonk's Adventure (USA).pce"
 rem set ROM_NAME="P:\ROMS\Bomberman (Japan).pce"
 rem set ROM_NAME="P:\ROMS\Bikkuriman World (Japan).pce"
 rem set ROM_NAME="P:\ROMS\Magical Chase (Japan).pce"
 rem set ROM_NAME="P:\ROMS\Shanghai (Japan).pce"
-rem set ROM_NAME="P:\ROMS\Fantasy Zone (USA).pce"
+set ROM_NAME="P:\ROMS\Fantasy Zone (USA).pce"
 
 if "%1" == "prof" (
   odin run . -linker:radlink -o:speed -no-bounds-check -define:ENABLE_SPALL=true -debug -- %ROM_NAME%
