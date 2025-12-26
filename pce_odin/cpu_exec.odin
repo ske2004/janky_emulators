@@ -3,7 +3,7 @@ package main
 import "core:fmt"
 import "base:intrinsics"
 
-cpu_exec_instr :: proc(cpu: ^Cpu) {
+cpu_exec_instr :: proc(cpu: ^CPU) {
   cpu_check_irq(cpu)
 
   pc_start := cpu.pc
@@ -271,7 +271,7 @@ cpu_exec_instr :: proc(cpu: ^Cpu) {
     cpu_stk_push_u8(cpu, cast(u8)cpu.p)
   case .PLP:
     cpu_dummy_read(cpu)
-    cpu.p = cast(Cpu_Flags)cpu_stk_pop_u8(cpu)
+    cpu.p = cast(CPU_Flags)cpu_stk_pop_u8(cpu)
   case .PHA:
     cpu_dummy_read(cpu)
     cpu_stk_push_u8(cpu, cpu.a)
@@ -331,7 +331,7 @@ cpu_exec_instr :: proc(cpu: ^Cpu) {
   case .NOP:
     cpu_dummy_read(cpu)
   case .RTI:
-    cpu.p = cast(Cpu_Flags)cpu_stk_pop_u8(cpu)
+    cpu.p = cast(CPU_Flags)cpu_stk_pop_u8(cpu)
     cpu.pc = cpu_stk_pop_u16(cpu)
   case .TST:
     imm := adr_mode_read_imm(cpu, adr)

@@ -90,7 +90,7 @@ Adr_Decoded :: union {
   Adr_Imm_Basic,
 }
 
-adr_decode :: proc(cpu: ^Cpu, adr: Adr_Mode) -> Adr_Decoded {
+adr_decode :: proc(cpu: ^CPU, adr: Adr_Mode) -> Adr_Decoded {
   #partial switch adr {
   case .Imp: return nil
   case .Imm: return Adr_Imm{val = cpu_read_pc_u8(cpu)}
@@ -127,7 +127,7 @@ adr_decode :: proc(cpu: ^Cpu, adr: Adr_Mode) -> Adr_Decoded {
   }
 }
 
-adr_mode_read_u8 :: proc(cpu: ^Cpu, adr: Adr_Decoded) -> u8 {
+adr_mode_read_u8 :: proc(cpu: ^CPU, adr: Adr_Decoded) -> u8 {
   switch v in adr {
   case Adr_Acc:         return cpu.a
   case Adr_Basic:       return cpu_read_u8(cpu, v.addr+v.offs)
@@ -147,7 +147,7 @@ adr_mode_read_u8 :: proc(cpu: ^Cpu, adr: Adr_Decoded) -> u8 {
   }
 }
 
-adr_mode_read_imm :: proc(cpu: ^Cpu, adr: Adr_Decoded) -> u8 {
+adr_mode_read_imm :: proc(cpu: ^CPU, adr: Adr_Decoded) -> u8 {
   #partial switch v in adr {
   case Adr_Imm_Basic: return v.imm
   case Adr_Imm_Zpg:   return v.imm
@@ -155,7 +155,7 @@ adr_mode_read_imm :: proc(cpu: ^Cpu, adr: Adr_Decoded) -> u8 {
   }
 }
 
-adr_mode_read_rel :: proc(cpu: ^Cpu, adr: Adr_Decoded) -> i8 {
+adr_mode_read_rel :: proc(cpu: ^CPU, adr: Adr_Decoded) -> i8 {
   #partial switch v in adr {
   case Adr_Rel:       return v.val
   case Adr_Basic_Rel: return v.rel
@@ -163,7 +163,7 @@ adr_mode_read_rel :: proc(cpu: ^Cpu, adr: Adr_Decoded) -> i8 {
   }
 }
 
-adr_mode_read_addr :: proc(cpu: ^Cpu, adr: Adr_Decoded) -> u16 {
+adr_mode_read_addr :: proc(cpu: ^CPU, adr: Adr_Decoded) -> u16 {
   #partial switch v in adr {
   case Adr_Basic:         return v.addr+v.offs
   case Adr_Basic_Indirect: return cpu_read_u16(cpu, v.addr+v.inner_offs)+v.outer_offs
@@ -171,7 +171,7 @@ adr_mode_read_addr :: proc(cpu: ^Cpu, adr: Adr_Decoded) -> u16 {
   }
 }
 
-adr_mode_write_u8 :: proc(cpu: ^Cpu, adr: Adr_Decoded, val: u8) {
+adr_mode_write_u8 :: proc(cpu: ^CPU, adr: Adr_Decoded, val: u8) {
   switch v in adr {
   case Adr_Acc:          cpu.a = val
   case Adr_Zpg:          cpu_write_u8(cpu, cast(u16)(v.addr+v.offs)|ZPG_START, val)

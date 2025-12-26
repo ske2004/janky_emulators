@@ -17,7 +17,7 @@ Block_Transfer_Reg :: struct {
   state: bool,
 }
 
-Cpu_Flags :: bit_field u8 {
+CPU_Flags :: bit_field u8 {
   car: bool | 1, // carry
   zer: bool | 1, // zero
   int: bool | 1, // interrupt
@@ -43,10 +43,10 @@ Opc_Info :: struct {
   extra: u8,    // for these instruction with numbers c:
 }
 
-Cpu :: struct {
+CPU :: struct {
   a, x, y, sp: u8,
   pc: u16,
-  p: Cpu_Flags,
+  p: CPU_Flags,
   mpr: [8]u8,
   bus: ^Bus,
   fast: bool,// csh and csl
@@ -79,13 +79,13 @@ addr_bank :: #force_inline proc(addr: u16) -> u16 {
 }
 
 @(no_instrumentation=true) 
-cpu_mem_map :: #force_inline proc(cpu: ^Cpu, addr: u16) -> u32 {
+cpu_mem_map :: #force_inline proc(cpu: ^CPU, addr: u16) -> u32 {
   low_addr := addr&BANK_MASK
   return (u32(cpu.mpr[addr_bank(addr)]) << BANK_SHIFT) | u32(low_addr)
 }
 
 @(no_instrumentation=true) 
-cpu_cycle :: #force_inline proc(cpu: ^Cpu) {
+cpu_cycle :: #force_inline proc(cpu: ^CPU) {
   if cpu.fast {
     bus_cycle(cpu.bus)
   } else {
@@ -97,14 +97,14 @@ cpu_cycle :: #force_inline proc(cpu: ^Cpu) {
 }
 
 @(no_instrumentation=true) 
-cpu_read_u8 :: #force_inline proc(cpu: ^Cpu, addr: u16) -> u8 {
+cpu_read_u8 :: #force_inline proc(cpu: ^CPU, addr: u16) -> u8 {
   value := bus_read_u8(cpu.bus, cpu_mem_map(cpu, addr))
   cpu_cycle(cpu)
   return value
 }
 
 @(no_instrumentation=true) 
-cpu_read_u16 :: #force_inline proc(cpu: ^Cpu, addr: u16) -> u16 {
+cpu_read_u16 :: #force_inline proc(cpu: ^CPU, addr: u16) -> u16 {
   lo := cast(u16)bus_read_u8(cpu.bus, cpu_mem_map(cpu, addr))
   cpu_cycle(cpu)
   hi := cast(u16)bus_read_u8(cpu.bus, cpu_mem_map(cpu, addr+1))
@@ -113,7 +113,7 @@ cpu_read_u16 :: #force_inline proc(cpu: ^Cpu, addr: u16) -> u16 {
 }
 
 @(no_instrumentation=true) 
-cpu_read_u16_zpg :: #force_inline proc(cpu: ^Cpu, addr: u8) -> u16 {
+cpu_read_u16_zpg :: #force_inline proc(cpu: ^CPU, addr: u8) -> u16 {
   lo := cast(u16)bus_read_u8(cpu.bus, cpu_mem_map(cpu, ZPG_START|cast(u16)(addr)))
   cpu_cycle(cpu)
   hi := cast(u16)bus_read_u8(cpu.bus, cpu_mem_map(cpu, ZPG_START|cast(u16)(addr+1)))
@@ -122,64 +122,64 @@ cpu_read_u16_zpg :: #force_inline proc(cpu: ^Cpu, addr: u8) -> u16 {
 }
 
 @(no_instrumentation=true) 
-cpu_write_u8 :: #force_inline proc(cpu: ^Cpu, addr: u16, val: u8) {
+cpu_write_u8 :: #force_inline proc(cpu: ^CPU, addr: u16, val: u8) {
   bus_write_u8(cpu.bus, cpu_mem_map(cpu, addr), val)
   cpu_cycle(cpu)
 }
 
-cpu_read_pc_u8 :: #force_inline proc(cpu: ^Cpu) -> u8 {
+cpu_read_pc_u8 :: #force_inline proc(cpu: ^CPU) -> u8 {
   value := bus_read_u8(cpu.bus, cpu_mem_map(cpu, cpu.pc))
   cpu_cycle(cpu)
   cpu.pc += 1
   return value
 }
 
-cpu_stk_push_u8 :: #force_inline proc(cpu: ^Cpu, val: u8) {
+cpu_stk_push_u8 :: #force_inline proc(cpu: ^CPU, val: u8) {
   cpu_read_u8(cpu, STK_START|cast(u16)cpu.sp) // dummy
   cpu_write_u8(cpu, STK_START|cast(u16)cpu.sp, val)
   cpu.sp -= 1
 }
 
-cpu_stk_push_u16 :: #force_inline proc(cpu: ^Cpu, val: u16) {
+cpu_stk_push_u16 :: #force_inline proc(cpu: ^CPU, val: u16) {
   cpu_stk_push_u8(cpu, cast(u8)(val>>8))
   cpu_stk_push_u8(cpu, cast(u8)(val&0xFF))
 }
 
-cpu_stk_write_u8 :: #force_inline proc(cpu: ^Cpu, val: u8) {
+cpu_stk_write_u8 :: #force_inline proc(cpu: ^CPU, val: u8) {
   // todo: do i need dummy here?
   cpu_write_u8(cpu, STK_START|cast(u16)cpu.sp, val)
 }
 
-cpu_stk_pop_u8 :: #force_inline proc(cpu: ^Cpu) -> u8 {
+cpu_stk_pop_u8 :: #force_inline proc(cpu: ^CPU) -> u8 {
   cpu.sp += 1
   // and here??
   cpu_read_u8(cpu, STK_START|cast(u16)cpu.sp) // dummy
   return cpu_read_u8(cpu, STK_START|cast(u16)cpu.sp)
 }
 
-cpu_stk_pop_u16 :: #force_inline proc(cpu: ^Cpu) -> u16 {
+cpu_stk_pop_u16 :: #force_inline proc(cpu: ^CPU) -> u16 {
   lo := cast(u16)cpu_stk_pop_u8(cpu)
   hi := cast(u16)cpu_stk_pop_u8(cpu)
   return (hi << 8) | lo
 }
 
-cpu_stk_read_u8 :: #force_inline proc(cpu: ^Cpu) -> u8 {
+cpu_stk_read_u8 :: #force_inline proc(cpu: ^CPU) -> u8 {
   // and here??
   return cpu_read_u8(cpu, STK_START|cast(u16)cpu.sp)
 }
 
-cpu_dummy_read :: #force_inline proc(cpu: ^Cpu) {
+cpu_dummy_read :: #force_inline proc(cpu: ^CPU) {
   cpu_read_u8(cpu, cpu.pc)
 }
 
-cpu_read_pc_u16 :: #force_inline proc(cpu: ^Cpu) -> u16 {
+cpu_read_pc_u16 :: #force_inline proc(cpu: ^CPU) -> u16 {
   lo := cast(u16)bus_read_u8(cpu.bus, cpu_mem_map(cpu, cpu.pc))
   hi := cast(u16)bus_read_u8(cpu.bus, cpu_mem_map(cpu, cpu.pc+1))
   cpu.pc += 2
   return (hi << 8) | lo
 }
 
-cpu_set_nz :: #force_inline proc(cpu: ^Cpu, value: u8) {
+cpu_set_nz :: #force_inline proc(cpu: ^CPU, value: u8) {
   cpu.p.neg = (transmute(i8)value) < 0
   cpu.p.zer = value == 0
 }
@@ -196,7 +196,7 @@ update_block_transfer_reg :: #force_inline proc(reg: ^Block_Transfer_Reg) {
   }
 }
 
-block_transfer :: proc(cpu: ^Cpu, srcop, dstop: Block_Transfer_Op) {
+block_transfer :: proc(cpu: ^CPU, srcop, dstop: Block_Transfer_Op) {
   clock_start := cpu.bus.clocks
   src := Block_Transfer_Reg{srcop, cpu_read_pc_u16(cpu), false}
   dst := Block_Transfer_Reg{dstop, cpu_read_pc_u16(cpu), false}
@@ -231,7 +231,7 @@ block_transfer :: proc(cpu: ^Cpu, srcop, dstop: Block_Transfer_Op) {
   log_instr_info("BLK: cyctot:%d, cyctrn:%d, cycntr:%d", cyc_total, cyc_tran, cyc_notran)
 }
 
-cpu_enter_irq :: proc(cpu: ^Cpu, addr: u16) {
+cpu_enter_irq :: proc(cpu: ^CPU, addr: u16) {
   cpu_stk_push_u16(cpu, cpu.pc)
   cpu_stk_push_u8(cpu, cast(u8)cpu.p)
 
@@ -240,7 +240,7 @@ cpu_enter_irq :: proc(cpu: ^Cpu, addr: u16) {
   cpu.pc = addr
 }
 
-cpu_check_irq :: proc(cpu: ^Cpu) {
+cpu_check_irq :: proc(cpu: ^CPU) {
   if cpu.p.int == false {
     if cpu.bus.irq_pending.irq2 && !cpu.bus.irq_disable.irq2 {
       cpu.bus.irq_pending.irq2 = false
@@ -257,7 +257,7 @@ cpu_check_irq :: proc(cpu: ^Cpu) {
   }
 }
 
-cpu_init :: proc(bus: ^Bus) -> Cpu {
+cpu_init :: proc(bus: ^Bus) -> CPU {
   return {
     p = {int = true, brk = true},
     pc = cast(u16)bus.rom[0x1FFE] | cast(u16)bus.rom[0x1FFF]<<8,

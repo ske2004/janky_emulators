@@ -5,7 +5,7 @@ import "core:log"
 
 is_tracing_enabled := true
 
-format_adr :: proc(cpu: ^Cpu, opc_info: Opc_Info, adr_decoded: Adr_Decoded) -> string {
+format_adr :: proc(cpu: ^CPU, opc_info: Opc_Info, adr_decoded: Adr_Decoded) -> string {
   #partial switch opc_info.adr {
     case .Imp:
       return ""
@@ -68,7 +68,7 @@ log_instr_info :: proc(fmt_arg: string, args: ..any, no_log: bool = false) {
   }
 }
 
-trace_instr :: proc(cpu: ^Cpu, opc: u8, pc: u16, opc_info: Opc_Info, adr_decoded: Adr_Decoded, stdout := false) {
+trace_instr :: proc(cpu: ^CPU, opc: u8, pc: u16, opc_info: Opc_Info, adr_decoded: Adr_Decoded, stdout := false) {
   when #config(ENABLE_TRACING, false) {
     if !is_tracing_enabled { return }
     context.allocator = context.temp_allocator

@@ -2,13 +2,13 @@ package main
 
 import "core:log"
 
-Irq :: enum u8 {
-  Irq2,
-  Irq1,
+IRQ :: enum u8 {
+  IRQ2,
+  IRQ1,
   Timer,
 }
 
-Irq_Reg :: bit_field u8 {
+IRQ_Reg :: bit_field u8 {
   irq2: bool  | 1,
   irq1: bool  | 1, 
   timer: bool | 1, 
@@ -20,19 +20,19 @@ Bus :: struct {
   save_ram: [0x2000]u8,
   clocks: uint,
 
-  irq_pending: Irq_Reg,
-  irq_disable: Irq_Reg,
+  irq_pending: IRQ_Reg,
+  irq_disable: IRQ_Reg,
 
   io_byte: u8,
 
   timer: Timer,
 
   vblank_occured: bool,
-  screen: [256*224]Rgb333,
+  screen: [256*224]RGB333,
   hucard_map: [0x80]u32,
 
-  vdc: Vdc,
-  vce: Vce,
+  vdc: VDC,
+  vce: VCE,
   joy: Joy,
 }
 
@@ -92,10 +92,10 @@ bus_cycle :: proc(bus: ^Bus) {
   vdc_cycle(bus, &bus.vdc)
 }
 
-bus_irq :: proc(bus: ^Bus, irq: Irq) {
+bus_irq :: proc(bus: ^Bus, irq: IRQ) {
   bit := cast(u8)1<<irq
   if (cast(u8)bus.irq_disable & bit) == 0 {
-    bus.irq_pending |= transmute(Irq_Reg)bit
+    bus.irq_pending |= transmute(IRQ_Reg)bit
   }
 }
 
