@@ -227,7 +227,7 @@ hand_opcode_table := [256]Opc_Info{
   0xFA = {.PLX,.Imp,4,0}, // [ok]
   0xFD = {.SBC,.Abx,5,0}, // [ok]
   0xFE = {.INC,.Abx,7,0}, // [ok]
-}//dfsgjsdfkgj
+}
 
 init_opcode :: proc(opc: u8) -> Opc_Info {
   hi, lo := opc>>4, opc&0xF
