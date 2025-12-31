@@ -162,7 +162,7 @@ vdc_rw_increment :: proc(vdc: ^VDC) -> u16 {
 }
 
 plot_dot :: proc(bus: ^Bus, x, y: int, color: RGB333) {
-  if x<0 || y<0 || x>=256 || y>=224 do return
+  assert(x>=0 || y>=0 || x<256 || y<224)
 
   bus.screen[x+y*256] = color
 }
