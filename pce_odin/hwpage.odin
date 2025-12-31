@@ -62,31 +62,32 @@ hwpage_map :: #force_inline proc(addr: u16) -> HW_Page_Dst {
   else do return nil
 }
 
-hwpage_read :: proc(bus: ^Bus, addr: u16) -> u8 {
-  bus_cycle(bus)
-
+hwpage_read :: proc(bus: ^Bus, addr: u16) -> (val: u8) {
   switch v in hwpage_map(addr) {
-  case VDC_Addrs:   return vdc_read(bus, &bus.vdc, v)
-  case VCE_Addrs:   return vce_read(&bus.vce, v)
-  case PSG_Addrs:   return 0x00
-  case Timer_Addrs: return timer_read(bus, &bus.timer, v)
-  case Joy_Addrs:   return joy_read(&bus.joy)
-  case ICtl_Addrs:  return ictl_read(bus, v)
-  case nil:         return 0xFF
+  case VDC_Addrs:   bus_cycle(bus); val = vdc_read(bus, &bus.vdc, v)
+  case VCE_Addrs:   bus_cycle(bus); val = vce_read(&bus.vce, v)
+  case PSG_Addrs:   val = bus.io_byte
+  case Timer_Addrs: val = timer_read(bus, &bus.timer, v)
+  case Joy_Addrs:   val = joy_read(&bus.joy)
+  case ICtl_Addrs:  val = ictl_read(bus, v)
+  case nil:         val = 0xFF
   }
-  unreachable()
-}
-
-hwpage_write :: proc(bus: ^Bus, addr: u16, val: u8) {
-  bus_cycle(bus)
 
   if addr >= 0x0800 && addr <= 0x17FF {
     bus.io_byte = val
   }
 
+  return
+}
+
+hwpage_write :: proc(bus: ^Bus, addr: u16, val: u8) {
+  if addr >= 0x0800 && addr <= 0x17FF {
+    bus.io_byte = val
+  }
+
   switch v in hwpage_map(addr) {
-  case VDC_Addrs:   vdc_write(bus, &bus.vdc, v, val)
-  case VCE_Addrs:   vce_write(&bus.vce, v, val)
+  case VDC_Addrs:   bus_cycle(bus); vdc_write(bus, &bus.vdc, v, val)
+  case VCE_Addrs:   bus_cycle(bus); vce_write(&bus.vce, v, val)
   case PSG_Addrs:   log.warnf("psg write: %04X %02X", addr, val)
   case Timer_Addrs: timer_write(bus, &bus.timer, v, val)
   case Joy_Addrs:   joy_write(&bus.joy, val)

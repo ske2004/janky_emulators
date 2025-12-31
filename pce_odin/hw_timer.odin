@@ -10,7 +10,7 @@ Timer :: struct {
 timer_read :: proc(bus: ^Bus, using timer: ^Timer, addr: Timer_Addrs) -> u8 {
   switch addr {
   case .ReloadVal: return (reload&0x7F)|(bus.io_byte&0x80) 
-  case .Enable:    return (u8(enabled)&0x01)|(bus.io_byte&0xFE)
+  case .Enable:    return (u8(enabled)&0x01)|(bus.io_byte&0x80)
   }
   unreachable()
 }

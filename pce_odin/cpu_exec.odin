@@ -365,6 +365,10 @@ cpu_exec_instr :: proc(cpu: ^CPU) {
   case .UNK:
     trace_instr(cpu, opc, pc_start, opc_info, adr, stdout = true)
     unimplemented(fmt.aprintf("%02X", opc))
+  case .SET:
+    unimplemented("SET")
+  case .SED:
+    unimplemented("SED")
   }
 
   // cycle_end := cpu.bus.clocks

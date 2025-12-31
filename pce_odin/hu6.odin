@@ -45,6 +45,7 @@ Opc_Info :: struct {
 
 CPU :: struct {
   a, x, y, sp: u8,
+  avr: u16,
   pc: u16,
   p: CPU_Flags,
   mpr: [8]u8,

@@ -278,8 +278,6 @@ vdc_draw_scanline :: proc(bus: ^Bus, vdc: ^VDC, y: int) {
 vdc_cyc := 0
 
 vdc_cycle :: proc(bus: ^Bus, using vdc: ^VDC) {
-  test := [1+2]int{}
-
   vdc_cyc += 3
 
   // TODO: temporary
