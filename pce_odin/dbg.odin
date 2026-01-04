@@ -3,7 +3,7 @@ package main
 import "core:fmt"
 import "core:log"
 
-is_tracing_enabled := true
+is_tracing_enabled := false
 
 format_adr :: proc(cpu: ^CPU, opc_info: Opc_Info, adr_decoded: Adr_Decoded) -> string {
   #partial switch opc_info.adr {

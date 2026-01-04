@@ -1,0 +1,3 @@
+STATUS spr collision
+STATUS overflow
+STATUS bsy bit

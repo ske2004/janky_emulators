@@ -1,4 +1,3 @@
-#+feature dynamic-literals
 package main
 
 import "core:os"
@@ -90,6 +89,10 @@ main :: proc() {
     }
     
     raylib.SetTargetFPS(60)
+
+    debug := raylib.GenImageColor(128*8, 128*8, raylib.WHITE)
+    raylib.ImageFormat(&debug, .UNCOMPRESSED_R8G8B8A8)
+    defer raylib.UnloadImage(debug)
 
     screen := raylib.GenImageColor(256, 224, raylib.WHITE)
     raylib.ImageFormat(&screen, .UNCOMPRESSED_R8G8B8A8)
@@ -220,10 +223,38 @@ main :: proc() {
           )
         }
       }
+      
+      debug_texture : Maybe(raylib.Texture2D)
+      defer raylib.UnloadTexture(texture)
+      if raylib.IsKeyDown(.THREE) {
+        dest := make([]RGB333, 1024*1024, context.temp_allocator)
+        vdc_draw_tilemap_contents(&bus, &bus.vdc, dest, 1024, 1024)
+        
+        rgba_buf := cast([^]u8)debug.data
+        for v, i in dest {
+          rgba_buf[i*4+0] = cast(u8)(v.r*32)
+          rgba_buf[i*4+1] = cast(u8)(v.g*32)
+          rgba_buf[i*4+2] = cast(u8)(v.b*32)
+          rgba_buf[i*4+3] = 0xFF
+        }
 
+        debug_texture = raylib.LoadTextureFromImage(debug)
 
+        mpos := raylib.GetMousePosition()
+        if mpos.x > 520 && mpos.y > 0 {
+          tile_x, tile_y := cast(int)mpos.x/8, cast(int)mpos.y/8
+          tmap_size := tmap_size_table[bus.vdc.mwr.tmap_size]
+          index := tile_x+tile_y*cast(int)tmap_size.x
+          fmt.printf("%v %v %04X %04X\n", tile_x, tile_y, index, bus.vdc.vram.vram[index])
+        }
+        raylib.DrawTextureEx(debug_texture.(raylib.Texture2D), {520, 0}, 0, 1, raylib.WHITE)
+      }
 
       raylib.EndDrawing()
+
+      if texture, ok := debug_texture.?; ok {
+        raylib.UnloadTexture(texture)
+      }
 
       free_all(context.temp_allocator)
     }
