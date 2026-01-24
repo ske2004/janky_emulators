@@ -13,6 +13,8 @@ import "vendor:raylib"
  
 instr_dbg_file : os.Handle
 
+SAMPLES_PER_FRAME :: PSG_SAMPLE_RATE/60
+
 when #config(ENABLE_SPALL, false) {
 
   spall_ctx: spall.Context
@@ -65,8 +67,8 @@ main :: proc() {
   rom := os.read_entire_file(os.args[1]) or_else panic("cant open rom :(")
   defer delete(rom)
 
-  bus := bus_init(rom)
-  cpu := cpu_init(&bus)
+  bus := bus_create(rom)
+  cpu := cpu_create(&bus)
 
   fmt.printf("rom size: %x", len(rom))
   log.infof("cpu: pc=%04X", cpu.pc)
@@ -81,6 +83,9 @@ main :: proc() {
 
     raylib.InitWindow(256*3+520, 224*3, "pcPÒW")
     defer raylib.CloseWindow()
+
+    raylib.InitAudioDevice()
+    defer raylib.CloseAudioDevice()
 
     mem_scroll := 0
     font := raylib.LoadFontEx("C:\\WINDOWS\\FONTS\\LUCON.TTF", 20, nil, 0)
@@ -97,6 +102,14 @@ main :: proc() {
     screen := raylib.GenImageColor(256, 224, raylib.WHITE)
     raylib.ImageFormat(&screen, .UNCOMPRESSED_R8G8B8A8)
     defer raylib.UnloadImage(screen)
+
+    audio_stream := raylib.LoadAudioStream(44100, 8, 1)
+    defer raylib.UnloadAudioStream(audio_stream)
+
+    raylib.PlayAudioStream(audio_stream)
+    audio_stream_buf := [SAMPLES_PER_FRAME]u8{}
+
+    channel_select := uint(0)
 
     frame := 0
 
@@ -123,6 +136,13 @@ main :: proc() {
       bus.vblank_occured = false
       diff := time.now()._nsec - start._nsec
 
+      if raylib.IsAudioStreamProcessed(audio_stream) {
+        for _, i in audio_stream_buf {
+          audio_stream_buf[i] = psg_cycle_read_sample(&bus, &bus.psg, channel_select)
+        }
+        raylib.UpdateAudioStream(audio_stream, &audio_stream_buf, SAMPLES_PER_FRAME);
+      }
+
       raylib.BeginDrawing()
       raylib.ClearBackground(raylib.BLACK)
 
@@ -142,7 +162,7 @@ main :: proc() {
       raylib.DrawTextureEx(texture, {520, 0}, 0, 3, raylib.WHITE)
       raylib.DrawTextEx(
         font,
-        fmt.caprintf("FPS: %v\nFRAME: %v\nTIME: %v", raylib.GetFPS(), frame, diff, allocator = context.temp_allocator),
+        fmt.caprintf("CHAN: %v\nFPS: %v\nFRAME: %v\nTIME: %v", channel_select, raylib.GetFPS(), frame, diff, allocator = context.temp_allocator),
         {0, 0},
         20,
         0,
@@ -178,7 +198,7 @@ main :: proc() {
         }
       }
 
-      if raylib.IsKeyDown(.ONE) {
+      if raylib.IsKeyDown(.F1) {
         for i in 0..<0x200 {
           pixels: [4]u8
           v := bus.vce.pal[i]
@@ -195,7 +215,7 @@ main :: proc() {
         }
       }
 
-      if raylib.IsKeyDown(.TWO) {
+      if raylib.IsKeyDown(.F2) {
         for i in 0..<uint(64) {
           sprite := vram_get_sprite(&bus.vdc.vram, i)^
           w, h := vram_sprite_dims(sprite)
@@ -226,7 +246,7 @@ main :: proc() {
       
       debug_texture : Maybe(raylib.Texture2D)
       defer raylib.UnloadTexture(texture)
-      if raylib.IsKeyDown(.THREE) {
+      if raylib.IsKeyDown(.F3) {
         dest := make([]RGB333, 1024*1024, context.temp_allocator)
         vdc_draw_tilemap_contents(&bus, &bus.vdc, dest, 1024, 1024)
         
@@ -249,6 +269,14 @@ main :: proc() {
         }
         raylib.DrawTextureEx(debug_texture.(raylib.Texture2D), {520, 0}, 0, 1, raylib.WHITE)
       }
+
+      if raylib.IsKeyDown(.ZERO) do channel_select = 0
+      if raylib.IsKeyDown(.ONE) do channel_select = 1
+      if raylib.IsKeyDown(.TWO) do channel_select = 2
+      if raylib.IsKeyDown(.THREE) do channel_select = 3
+      if raylib.IsKeyDown(.FOUR) do channel_select = 4
+      if raylib.IsKeyDown(.FIVE) do channel_select = 5
+      if raylib.IsKeyDown(.SIX) do channel_select = 6
 
       raylib.EndDrawing()
 

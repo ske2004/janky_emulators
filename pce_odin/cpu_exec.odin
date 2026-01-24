@@ -6,10 +6,6 @@ import "base:intrinsics"
 cpu_exec_instr :: proc(cpu: ^CPU) {
   cpu_check_irq(cpu)
 
-  if cpu.pc == 0xE6AA {
-    is_tracing_enabled = true
-  }
-
   if cpu.p.dec {
     panic("decimal mode isn't implemented")
   }

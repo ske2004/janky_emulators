@@ -258,7 +258,7 @@ cpu_check_irq :: proc(cpu: ^CPU) {
   }
 }
 
-cpu_init :: proc(bus: ^Bus) -> CPU {
+cpu_create :: proc(bus: ^Bus) -> CPU {
   return {
     p = {int = true, brk = true},
     pc = cast(u16)bus.rom[0x1FFE] | cast(u16)bus.rom[0x1FFF]<<8,

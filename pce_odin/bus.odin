@@ -30,7 +30,8 @@ Bus :: struct {
   vblank_occured: bool,
   screen: [256*224]RGB333,
   hucard_map: [0x80]u32,
-
+  
+  psg: PSG,
   vdc: VDC,
   vce: VCE,
   joy: Joy,
@@ -42,7 +43,7 @@ rom_read :: proc(hucard_map: [0x80]u32, rom: []u8, addr: u32) -> u8 {
   return rom[real_addr]
 }
 
-bus_init :: proc(rom: []u8) -> Bus {
+bus_create :: proc(rom: []u8) -> Bus {
   // thanks to https://github.com/pce-devel/Etripator for reference
 
   hucard_map := [0x80]u32{}

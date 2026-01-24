@@ -1,8 +1,8 @@
 @echo off
 
 rem set ROM_NAME="P:\ROMS\Bonk's Adventure (USA).pce"
-set ROM_NAME="P:\ROMS\Bomberman (Japan).pce"
-rem set ROM_NAME="P:\ROMS\Bikkuriman World (Japan).pce"
+rem set ROM_NAME="P:\ROMS\Bomberman (Japan).pce"
+set ROM_NAME="P:\ROMS\Bikkuriman World (Japan).pce"
 rem set ROM_NAME="P:\ROMS\Magical Chase (Japan).pce"
 rem set ROM_NAME="P:\ROMS\Shanghai (Japan).pce"
 rem set ROM_NAME="P:\ROMS\Fantasy Zone (USA).pce"
