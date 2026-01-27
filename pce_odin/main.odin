@@ -13,7 +13,7 @@ import "vendor:raylib"
  
 instr_dbg_file : os.Handle
 
-SAMPLES_PER_FRAME :: PSG_SAMPLE_RATE/60
+SAMPLES_PER_FRAME :: PSG_SAMPLE_RATE/30*2
 
 when #config(ENABLE_SPALL, false) {
 
@@ -103,7 +103,7 @@ main :: proc() {
     raylib.ImageFormat(&screen, .UNCOMPRESSED_R8G8B8A8)
     defer raylib.UnloadImage(screen)
 
-    audio_stream := raylib.LoadAudioStream(44100, 8, 1)
+    audio_stream := raylib.LoadAudioStream(44100, 8, 2)
     defer raylib.UnloadAudioStream(audio_stream)
 
     raylib.PlayAudioStream(audio_stream)
@@ -137,10 +137,12 @@ main :: proc() {
       diff := time.now()._nsec - start._nsec
 
       if raylib.IsAudioStreamProcessed(audio_stream) {
-        for _, i in audio_stream_buf {
-          audio_stream_buf[i] = psg_cycle_read_sample(&bus, &bus.psg, channel_select)
+        for i:=0; i<len(audio_stream_buf); i+=2 {
+          l, r := psg_cycle_read_sample(&bus, &bus.psg, channel_select)
+          audio_stream_buf[i] = l
+          audio_stream_buf[i+1] = r
         }
-        raylib.UpdateAudioStream(audio_stream, &audio_stream_buf, SAMPLES_PER_FRAME);
+        raylib.UpdateAudioStream(audio_stream, &audio_stream_buf, SAMPLES_PER_FRAME/2);
       }
 
       raylib.BeginDrawing()

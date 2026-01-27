@@ -60,8 +60,6 @@ HW_Page_Dst :: union {
 }
 
 hwpage_map :: #force_inline proc(addr: u16) -> HW_Page_Dst {
-  t := bit_set[PSG_Addrs]{.Chan_Select}
-
   if addr >= 0x0000 && addr <= 0x03FF do return VDC_Addrs(addr%4)
   else if addr >= 0x0400 && addr <= 0x07FF do return VCE_Addrs(addr%8)
   else if addr >= 0x0800 && addr <= 0x0BFF do return PSG_Addrs(addr%16) // is it correct

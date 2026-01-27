@@ -81,7 +81,7 @@ trace_instr :: proc(cpu: ^CPU, opc: u8, pc: u16, opc_info: Opc_Info, adr_decoded
     if opc_info.instr in bitset {
       extra = fmt.aprintf("%v", opc_info.extra)
     }
-
+    
     if stdout {
       fmt.printf("%02X %04X %06X %s%s %s\n", opc, pc, cpu_mem_map(cpu, pc), opc_info.instr, extra, t)
     } else {
