@@ -91,6 +91,7 @@ bus_cycle :: proc(bus: ^Bus) {
   bus.clocks += 3
   timer_cycle(bus, &bus.timer)
   vdc_cycle(bus, &bus.vdc)
+  psg_cycle(bus, &bus.psg)
 }
 
 bus_irq :: proc(bus: ^Bus, irq: IRQ) {

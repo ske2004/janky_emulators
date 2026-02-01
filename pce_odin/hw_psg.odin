@@ -2,6 +2,7 @@ package main
 
 import "core:fmt"
 import "core:math/rand"
+import "core:math"
 
 PSG_SAMPLE_RATE :: 44100
 
@@ -29,8 +30,12 @@ PSG_Chan_Noise :: bit_field u8 {
   on:     bool | 1,
 }
 
+PSG_Sample :: bit_field u8 {
+  val: u8 | 5
+}
+
 PSG_Chan :: struct {
-  samples:    [32]u8,
+  samples:    [32]PSG_Sample,
   freq:       uint,
   flags:      PSG_Chan_Flags,
   balance:    PSG_Balance,
@@ -42,16 +47,43 @@ PSG_Chan :: struct {
 }
 
 PSG :: struct {
-  ring_buf:       [1024]u8,
-  ring_read_idx:  uint,
-  ring_write_idx: uint,
   chan_selected:  int,
   channels:       [6]PSG_Chan,
   global_balance: PSG_Balance,
   lfo_freq:       u8,
   lfo_flags:      PSG_LFO_Flags,
+  rng:            rand.Xoshiro256_Random_State,
+  sample_buf:     [dynamic]f32,
+  
   cycles:         uint,
-  rng:            rand.Xoshiro256_Random_State
+  dac_start:      uint
+}
+
+psg_resample :: proc(buf_in, buf_out: []f32) {
+  if len(buf_in) == 0 {
+    return
+  }
+
+  l_in := len(buf_in)/2
+  l_out := len(buf_out)/2
+
+  for i:=0; i<l_out; i+=1 {
+    t := cast(f32)i/cast(f32)l_out*cast(f32)l_in
+    j := clamp(cast(int)t, 0, l_in-1)
+
+    buf_out[i*2] = buf_in[j*2]
+    buf_out[i*2+1] = buf_in[j*2+1]
+  }
+}
+
+@(private="file")
+powf10 :: proc(f: f32) -> f32 {
+  return math.exp_f32(f * math.LN10)
+}
+
+// Convert decibel to linear factor
+vol :: proc(k: f32, n: f32, rate: f32) -> f32 {
+  return powf10(((k-n+1)*-rate/2)/10.0)
 }
 
 psg_get_chan :: proc(psg: ^PSG) -> ^PSG_Chan {
@@ -64,11 +96,10 @@ psg_get_chan :: proc(psg: ^PSG) -> ^PSG_Chan {
 
 psg_cycle_chan :: proc(psg: ^PSG, chan: ^PSG_Chan) {
   if chan.noise.on {
-    t := (chan.noise.freq~0x1F)*2
+    t := (chan.noise.freq~0x1F)
     if t != 0 && psg.cycles%t == 0 {
       if chan.sample_idx == 0 {
         chan._noise_state = cast(u8)(rand.uint_max(2, rand.xoshiro256_random_generator(&psg.rng)))*31
-        fmt.printf("Noise state: %v\n", chan._noise_state)
       }
       chan.sample_idx += 1
       chan.sample_idx %= 32
@@ -82,51 +113,85 @@ psg_cycle_chan :: proc(psg: ^PSG, chan: ^PSG_Chan) {
   }
 }
 
-psg_read_sample :: proc(bus: ^Bus, psg: ^PSG, chan: uint) -> u8 {
+psg_chan_read_sample :: proc(bus: ^Bus, psg: ^PSG, chan: uint) -> PSG_Sample {
   chan := psg.channels[chan]
   if chan.noise.on {
-    return chan._noise_state
+    return transmute(PSG_Sample)(chan._noise_state)
   } else {
     return chan.samples[chan.sample_idx]
   }
 }
 
-psg_cycle_read_sample :: proc(bus: ^Bus, psg: ^PSG, chan: uint) -> (l: u8, r: u8) {
-  cps := 3580000 / PSG_SAMPLE_RATE
+psg_chan_mix :: proc(bus: ^Bus, psg: ^PSG, chan: uint) -> (l, r: f32) {
+  s := psg_chan_read_sample(bus, psg, cast(uint)chan).val
+  sample := cast(f32)s/16
 
-  if chan == 0 {
-    lt, rt: f32 = 0, 0
-    for chan, i in psg.channels {
-      if chan.flags.on {
-        sample := cast(f32)psg_read_sample(bus, psg, cast(uint)i)
-        lt += sample*
-              (cast(f32)chan.flags.volume/32.0)*
-              (cast(f32)chan.balance.left/16.0);
-        rt += sample*
-              (cast(f32)chan.flags.volume/32.0)*
-              (cast(f32)chan.balance.right/16.0);
-      }
-    }
+  chan := psg.channels[chan]
 
-    lt *= (cast(f32)psg.global_balance.left/16.0)
-    rt *= (cast(f32)psg.global_balance.right/16.0)
-
-    l = cast(u8)(lt / cast(f32)len(psg.channels))
-    r = cast(u8)(rt / cast(f32)len(psg.channels))
-  } else {
-    l = psg_read_sample(bus, psg, chan-1)
-    r = l
+  if !chan.flags.on {
+    return
   }
 
-  for i in 0..<cps {
+  l = sample*
+      vol(31, cast(f32)chan.flags.volume, 1.5)*
+      vol(15, cast(f32)chan.balance.left, 3);
+  r = sample*
+      vol(31, cast(f32)chan.flags.volume, 1.5)*
+      vol(15, cast(f32)chan.balance.right, 3);
+
+  return l, r
+}
+
+psg_flush :: proc(psg: ^PSG, buf_out: []f32) {
+  fmt.printf("SampleReq: %v -> %v\n", len(psg.sample_buf), len(buf_out))
+  psg_resample(psg.sample_buf[:], buf_out)
+  clear(&psg.sample_buf)
+}
+
+psg_read_sample :: proc(bus: ^Bus, psg: ^PSG, chan: uint) -> (l: f32, r: f32) {
+  if chan == 0 {
+    for chan, i in psg.channels {
+      lt, rt := psg_chan_mix(bus, psg, uint(i))
+      l += lt
+      r += rt
+    }
+
+    l /= cast(f32)len(psg.channels)
+    r /= cast(f32)len(psg.channels)
+  } else {
+    l, r = psg_chan_mix(bus, psg, chan-1)
+  }
+
+  l *= vol(15, cast(f32)psg.global_balance.left, 3)
+  r *= vol(15, cast(f32)psg.global_balance.right, 3)
+
+  return 
+}
+
+psg_cyc := uint(0)
+
+psg_cycle :: proc(bus: ^Bus, psg: ^PSG) {
+  CPS :: 3580000 / PSG_SAMPLE_RATE
+
+  psg_cyc += 3
+
+  for psg_cyc >= 6 {
+    psg_cyc -= 6
+
     for &chan in psg.channels {
       psg_cycle_chan(psg, &chan)
     }
 
+    if psg.cycles >= psg.dac_start + CPS {
+      psg.dac_start += CPS
+      
+      l, r := psg_read_sample(bus, psg, 0)
+
+      append(&psg.sample_buf, l, r)
+    }
+    
     psg.cycles += 1
   }
-
-  return 
 }
 
 psg_read :: proc(bus: ^Bus, psg: ^PSG, adr: PSG_Addrs) -> u8 {
@@ -151,6 +216,10 @@ psg_write :: proc(bus: ^Bus, psg: ^PSG, adr: PSG_Addrs, val: u8) {
     }
   case .Chan_Flags:
     if chan != nil {
+      if !chan.flags.on && chan.flags.dda_on {
+        chan.write_idx = 0
+      }
+
       chan.flags = cast(PSG_Chan_Flags)val
     }
   case .Chan_Balance:
@@ -160,7 +229,7 @@ psg_write :: proc(bus: ^Bus, psg: ^PSG, adr: PSG_Addrs, val: u8) {
   case .Chan_Sound_Data:
     if chan != nil {
       if !chan.flags.on && !chan.flags.dda_on {
-        chan.samples[chan.write_idx] = val&0x1F
+        chan.samples[chan.write_idx] = transmute(PSG_Sample)(val&0x1F)
         chan.write_idx += 1
         chan.write_idx %= len(chan.samples)
       }

@@ -342,7 +342,7 @@ vdc_cycle :: proc(bus: ^Bus, vdc: ^VDC) {
     }
 
     vdc.x += 1
-    if vdc.x == 342 {
+    if vdc.x == 340 {
       vdc.ty += 1
       if vdc.y < 224 {
         vdc_draw_scanline(bus, vdc, vdc.y)

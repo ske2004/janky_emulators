@@ -13,7 +13,7 @@ import "vendor:raylib"
  
 instr_dbg_file : os.Handle
 
-SAMPLES_PER_FRAME :: PSG_SAMPLE_RATE/30*2
+SAMPLES_PER_FRAME :: PSG_SAMPLE_RATE/30
 
 when #config(ENABLE_SPALL, false) {
 
@@ -73,6 +73,10 @@ main :: proc() {
   fmt.printf("rom size: %x", len(rom))
   log.infof("cpu: pc=%04X", cpu.pc)
 
+  for i in 0..<32 {
+    fmt.printf("vol %v = %v\n", i, vol(31, cast(f32)i, 1.5))
+  }
+
   when #config(HEADLESS, false) {
     for {
       cpu_exec_instr(&cpu)
@@ -103,15 +107,17 @@ main :: proc() {
     raylib.ImageFormat(&screen, .UNCOMPRESSED_R8G8B8A8)
     defer raylib.UnloadImage(screen)
 
-    audio_stream := raylib.LoadAudioStream(44100, 8, 2)
+    audio_stream := raylib.LoadAudioStream(PSG_SAMPLE_RATE, 32, 2)
     defer raylib.UnloadAudioStream(audio_stream)
 
     raylib.PlayAudioStream(audio_stream)
-    audio_stream_buf := [SAMPLES_PER_FRAME]u8{}
+    audio_stream_buf := [SAMPLES_PER_FRAME*2]f32{}
 
     channel_select := uint(0)
 
     frame := 0
+
+    cyc_start := uint(0)
 
     for !raylib.WindowShouldClose() {
       if frame == ENABLE_TRACING_AFTER_FRAME {
@@ -134,15 +140,17 @@ main :: proc() {
         cpu_exec_instr(&cpu)
       }
       bus.vblank_occured = false
+      
+      cyc_diff := bus.clocks - cyc_start
+      cyc_start = bus.clocks
+
       diff := time.now()._nsec - start._nsec
 
-      if raylib.IsAudioStreamProcessed(audio_stream) {
-        for i:=0; i<len(audio_stream_buf); i+=2 {
-          l, r := psg_cycle_read_sample(&bus, &bus.psg, channel_select)
-          audio_stream_buf[i] = l
-          audio_stream_buf[i+1] = r
+      if frame%2 == 0 {
+        if raylib.IsAudioStreamProcessed(audio_stream) {
+          psg_flush(&bus.psg, audio_stream_buf[:])
+          raylib.UpdateAudioStream(audio_stream, &audio_stream_buf, SAMPLES_PER_FRAME);
         }
-        raylib.UpdateAudioStream(audio_stream, &audio_stream_buf, SAMPLES_PER_FRAME/2);
       }
 
       raylib.BeginDrawing()
@@ -164,7 +172,7 @@ main :: proc() {
       raylib.DrawTextureEx(texture, {520, 0}, 0, 3, raylib.WHITE)
       raylib.DrawTextEx(
         font,
-        fmt.caprintf("CHAN: %v\nFPS: %v\nFRAME: %v\nTIME: %v", channel_select, raylib.GetFPS(), frame, diff, allocator = context.temp_allocator),
+        fmt.caprintf("CYC/SEC: %v\nCHAN: %v\nFPS: %v\nFRAME: %v\nTIME: %v", cyc_diff*60, channel_select, raylib.GetFPS(), frame, diff, allocator = context.temp_allocator),
         {0, 0},
         20,
         0,
