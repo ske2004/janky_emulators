@@ -127,6 +127,7 @@ cpu_exec_instr :: proc(cpu: ^CPU) {
       cpu.p.ovf = (~(cpu.a ~ val) & (cpu.a ~ res) & 0x80) > 0
       cpu.p.zer = res == 0
       cpu.a = res
+      cpu_cycle(cpu) // here?
     } else {
       calc := cast(u16)cpu.a + cast(u16)val + cast(u16)cpu.p.car
       result := cast(u8)(calc&0xFF)
@@ -150,6 +151,7 @@ cpu_exec_instr :: proc(cpu: ^CPU) {
       cpu.p.ovf = (~(cpu.a ~ val) & (cpu.a ~ res) & 0x80) > 0
       cpu.p.zer = res == 0
       cpu.a = res
+      cpu_cycle(cpu)
     } else {
 	    calc := cast(u16)cpu.a + cast(u16)~val + cast(u16)cpu.p.car
 	    result := cast(u8)(calc&0xFF)
