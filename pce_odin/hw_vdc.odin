@@ -9,7 +9,7 @@ VDC_Reg :: enum {
   Mawr    = 0x00, // VDC memory write
   Marr    = 0x01, // VDC memory read
   Vrw     = 0x02, // VRAM read/write
-  Unused0 = 0x03,
+  Unused0 = 0x03, // TODO: https://pcedev.wordpress.com/2014/08/14/vdc-secret-registers/
   Unused1 = 0x04,
   Cr      = 0x05, // control register
   Rcr     = 0x06, // raster compare register
