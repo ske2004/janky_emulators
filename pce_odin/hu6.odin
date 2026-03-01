@@ -123,6 +123,13 @@ cpu_read_u16_zpg :: #force_inline proc(cpu: ^CPU, addr: u8) -> u16 {
 }
 
 @(no_instrumentation=true) 
+cpu_read_u8_zpg :: #force_inline proc(cpu: ^CPU, addr: u8) -> u8 {
+  lo := bus_read_u8(cpu.bus, cpu_mem_map(cpu, ZPG_START|cast(u16)(addr)))
+  cpu_cycle(cpu)
+  return lo
+}
+
+@(no_instrumentation=true) 
 cpu_write_u8 :: #force_inline proc(cpu: ^CPU, addr: u16, val: u8) {
   bus_write_u8(cpu.bus, cpu_mem_map(cpu, addr), val)
   cpu_cycle(cpu)
@@ -133,6 +140,18 @@ cpu_read_pc_u8 :: #force_inline proc(cpu: ^CPU) -> u8 {
   cpu_cycle(cpu)
   cpu.pc += 1
   return value
+}
+
+cpu_read_a :: #force_inline proc(cpu: ^CPU) -> u8 {
+	return cpu_read_u8_zpg(cpu, cpu.x) if cpu.p.mem else cpu.a 
+}
+
+cpu_write_a :: #force_inline proc(cpu: ^CPU, val: u8) {
+	if cpu.p.mem {
+		cpu_write_u8(cpu, ZPG_START|cast(u16)cpu.x, val)
+	} else {
+		cpu.a = val
+	}
 }
 
 cpu_stk_push_u8 :: #force_inline proc(cpu: ^CPU, val: u8) {
