@@ -11,7 +11,7 @@ import "core:sync"
 import "core:prof/spall"
 import "vendor:raylib"
  
-instr_dbg_file : os.Handle
+instr_dbg_file : ^os.File
 
 SAMPLES_PER_FRAME :: PSG_SAMPLE_RATE/30
 
@@ -61,10 +61,10 @@ main :: proc() {
     panic("give a rom")
   }
 
-  instr_dbg_file = os.open("trace.txt", os.O_WRONLY|os.O_TRUNC|os.O_CREATE) or_else panic("can't open trace")
+  instr_dbg_file = os.open("trace.txt", {.Write,.Create,.Trunc}) or_else panic("can't open trace")
   defer os.close(instr_dbg_file)
 
-  rom := os.read_entire_file(os.args[1]) or_else panic("cant open rom :(")
+  rom := os.read_entire_file(os.args[1], context.allocator) or_else panic("cant open rom :(")
   defer delete(rom)
 
   bus := bus_create(rom)

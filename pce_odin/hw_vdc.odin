@@ -71,7 +71,7 @@ VDC_Cr :: bit_field u16 {
   reserved0:    u8   | 2,
   spr_enable:   bool | 1,
   bkg_enable:   bool | 1,
-  reserved1:    u8   | 2,
+  reserved1:    u8   | 3,
   rw_increment: u8   | 2,
 }
 
@@ -323,8 +323,8 @@ vdc_cycle :: proc(bus: ^Bus, vdc: ^VDC) {
       if vdc.dmalen == 0 {
         vdc.dma_state = .None
 
-        vdc.status.vram_dma_end = true
         if vdc.dmactrl.vram_to_vram_int {
+          vdc.status.vram_dma_end = true
           bus_irq(bus, .IRQ1)
         }
       }
@@ -334,8 +334,8 @@ vdc_cycle :: proc(bus: ^Bus, vdc: ^VDC) {
       vdc.commit_vblank_satb_dma_in_clocks -= 1
 
       if vdc.commit_vblank_satb_dma_in_clocks == 0 {
-        vdc.status.vram_to_satb_end = true
         if vdc.dmactrl.vram_to_satb_int {
+          vdc.status.vram_to_satb_end = true
           bus_irq(bus, .IRQ1)
         }
       }
@@ -346,15 +346,16 @@ vdc_cycle :: proc(bus: ^Bus, vdc: ^VDC) {
       vdc.ty += 1
       if vdc.y < 224 {
         vdc_draw_scanline(bus, vdc, vdc.y)
-      } 
+      }
+
+      vdc.x = 0
+      vdc.y += 1
+
       if vdc.rcr >= 64 && vdc.y < 224 && vdc.cr.scanline_int && int(vdc.rcr)-64 == vdc.y {
         log_instr_info("rcr!")
         vdc.status.scanline_happen = true
         bus_irq(bus, .IRQ1)
       }
-
-      vdc.x = 0
-      vdc.y += 1
 
       if vdc.y == 263 {
         vdc.y = 0
