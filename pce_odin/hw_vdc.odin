@@ -133,7 +133,8 @@ VDC :: struct {
 
   dma_state: VDC_DMA_State,
   dma_buf: u16,
-
+  vram_buf: u16,
+  
   x, y: int,
   tx, ty: u16,
 }
@@ -436,13 +437,14 @@ vdc_write :: proc(bus: ^Bus, vdc: ^VDC, addr: VDC_Addrs, val: u8) {
   case .Unknown1:
   case .Data_lo:
     if vdc.reg_selected == .Vrw {
-      vdc.vram.vram[vdc.mawr] = cast(u16)val
+      vdc.vram_buf = cast(u16)val
     } else {
       vdc_write_reg(vdc, vdc.reg_selected, (vdc_read_reg(vdc, vdc.reg_selected)&0xFF00)|cast(u16)val)
     }
   case .Data_hi:
     if vdc.reg_selected == .Vrw {
-      vdc.vram.vram[vdc.mawr] = (vdc.vram.vram[vdc.mawr]&0x00FF) | cast(u16)val<<8
+      vdc.vram.vram[vdc.mawr] = vdc.vram_buf|(cast(u16)val<<8)
+      vdc.vram_buf = 0
       vdc.mawr += vdc_rw_increment(vdc)
       vdc.mawr &= 0x7FFF
     } else {
