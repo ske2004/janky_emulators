@@ -6,6 +6,7 @@ RGB333 :: bit_field u16 {
   b: uint | 3,
   r: uint | 3,
   g: uint | 3,
+  l: bool | 1 // Layer
 }
 
 VCE_Freq :: enum {
@@ -56,4 +57,4 @@ vce_write :: proc(vce: ^VCE, addr: VCE_Addrs, val: u8) {
     vce.pal_index &= 0x1FF
   case .Unknown6, .Unknown7: return
   }
-} 
+}

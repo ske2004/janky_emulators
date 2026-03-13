@@ -143,7 +143,7 @@ psg_chan_mix :: proc(bus: ^Bus, psg: ^PSG, chan: uint) -> (l, r: f32) {
 }
 
 psg_flush :: proc(psg: ^PSG, buf_out: []f32) {
-  fmt.printf("SampleReq: %v -> %v\n", len(psg.sample_buf), len(buf_out))
+  // fmt.printf("SampleReq: %v -> %v\n", len(psg.sample_buf), len(buf_out))
   psg_resample(psg.sample_buf[:], buf_out)
   clear(&psg.sample_buf)
 }

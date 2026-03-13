@@ -1,11 +1,10 @@
 package main
 
+import "core:c"
 import "core:os"
 import "core:log"
 import "core:time"
 import "core:fmt"
-import "core:mem"
-import "core:io"
 import "base:runtime"
 import "core:sync"
 import "core:prof/spall"
@@ -16,7 +15,6 @@ instr_dbg_file : ^os.File
 SAMPLES_PER_FRAME :: PSG_SAMPLE_RATE/30
 
 when #config(ENABLE_SPALL, false) {
-
   spall_ctx: spall.Context
   @(thread_local) spall_buffer: spall.Buffer
 
@@ -66,7 +64,7 @@ main :: proc() {
 
   rom := os.read_entire_file(os.args[1], context.allocator) or_else panic("cant open rom :(")
   defer delete(rom)
-
+  
   bus := bus_create(rom)
   cpu := cpu_create(&bus)
 
@@ -227,13 +225,16 @@ main :: proc() {
 
       if raylib.IsKeyDown(.F2) {
         for i in 0..<uint(64) {
-          sprite := vram_get_sprite(&bus.vdc.vram, i)^
+          sprite := vram_get_sprite(&bus.vdc.vram, i)
           w, h := vram_sprite_dims(sprite)
+          x, y := cast(f32)sprite.x*3-32*3+520, cast(f32)sprite.y*3-64*3
+          
+          raylib.DrawText(fmt.ctprintf("%d", i), cast(c.int)x, cast(c.int)y-12, 10, raylib.WHITE)
 
           raylib.DrawRectangleLinesEx(
             {
-              cast(f32)sprite.x*3-32*3+520,
-              cast(f32)sprite.y*3-64*3,
+              x,
+              y,
               cast(f32)w*3,
               cast(f32)h*3,
             },
@@ -243,8 +244,8 @@ main :: proc() {
 
           raylib.DrawRectangleLinesEx(
             {
-              cast(f32)sprite.x*3-32*3+520,
-              cast(f32)sprite.y*3-64*3,
+              x,
+              y,
               cast(f32)w*3,
               cast(f32)h*3,
             },
