@@ -28,7 +28,7 @@ Bus :: struct {
   timer: Timer,
 
   vblank_occured: bool,
-  screen: [256*224]RGB333,
+  screen: [512*224]RGB333,
   hucard_map: [0x80]u32,
   
   psg: PSG,
@@ -100,4 +100,3 @@ bus_irq :: proc(bus: ^Bus, irq: IRQ) {
     bus.irq_pending |= transmute(IRQ_Reg)bit
   }
 }
-

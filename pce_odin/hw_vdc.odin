@@ -1,3 +1,4 @@
+// TODO: KILL
 package main
 
 import "core:log"
@@ -134,6 +135,7 @@ VDC :: struct {
   dma_state: VDC_DMA_State,
   dma_buf: u16,
   vram_buf: u16,
+  out_width: uint,
   
   x, y: int,
   tx, ty: u16,
@@ -166,8 +168,8 @@ vdc_rw_increment :: proc(vdc: ^VDC) -> u16 {
 }
 
 plot_dot :: proc(bus: ^Bus, x, y: int, color: RGB333) {
-  if x>=0 && y>=0 && x<256 && y<224 {
-    bus.screen[x+y*256] = color
+  if x>=0 && y>=0 && x<512 && y<224 {
+    bus.screen[x+y*512] = color
   }
 }
 
@@ -259,8 +261,8 @@ vdc_draw_tilemap_contents :: proc(bus: ^Bus, vdc: ^VDC, dest: []RGB333, dest_w, 
 
 vdc_draw_scanline :: proc(bus: ^Bus, vdc: ^VDC, y: int) {
 
-  for i in 0..<256 {
-    bus.screen[i+y*256] = bus.vce.pal[0]
+	for i in 0..<int(vdc.out_width) {
+    bus.screen[i+y*512] = bus.vce.pal[0]
   }
   
   if vdc.cr.spr_enable {
@@ -282,9 +284,9 @@ vdc_draw_scanline :: proc(bus: ^Bus, vdc: ^VDC, y: int) {
 
   
   if vdc.cr.bkg_enable {
-    for x in 0..<uint(256) {
+    for x in 0..<vdc.out_width {
       if color, ok := vdc_sample_tile(bus, vdc, cast(uint)vdc.tx+x, cast(uint)vdc.ty).?; ok {
-      	index := x+uint(y)*256
+      	index := x+uint(y)*512
       	if !bus.screen[index].l {
       		bus.screen[index] = color
       	}
@@ -296,6 +298,12 @@ vdc_draw_scanline :: proc(bus: ^Bus, vdc: ^VDC, y: int) {
 vdc_cyc := 0
 
 vdc_cycle :: proc(bus: ^Bus, vdc: ^VDC) {
+	switch bus.vce.ctrl.freq {
+	case .Mhz5:  vdc.out_width = 256
+	case .Mhz7:  vdc.out_width = 340
+	case .Mhz10: vdc.out_width = 512
+	case:        vdc.out_width = 512
+	}
   vdc_cyc += 3
 
   // TODO: temporary
@@ -365,7 +373,7 @@ vdc_cycle :: proc(bus: ^Bus, vdc: ^VDC) {
 	      vdc_draw_scanline(bus, vdc, vdc.y)
 	    }
     }
-    if vdc.x >= 65 && vdc.x <= 65+256 {
+    if vdc.x >= 65 && vdc.x <= 65+cast(int)vdc.out_width {
 	    vdc.tx += 1
     }
     if vdc.x == 341 {

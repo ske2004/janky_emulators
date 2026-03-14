@@ -37,6 +37,8 @@ when #config(ENABLE_SPALL, false) {
 
 ENABLE_TRACING_AFTER_FRAME :: 1000
 
+bus: Bus
+
 main :: proc() {
   when #config(ENABLE_SPALL, false) {
     spall_ctx = spall.context_create("trace.spall")
@@ -65,7 +67,7 @@ main :: proc() {
   rom := os.read_entire_file(os.args[1], context.allocator) or_else panic("cant open rom :(")
   defer delete(rom)
   
-  bus := bus_create(rom)
+  bus = bus_create(rom)
   cpu := cpu_create(&bus)
 
   fmt.printf("rom size: %x", len(rom))
@@ -101,7 +103,7 @@ main :: proc() {
     raylib.ImageFormat(&debug, .UNCOMPRESSED_R8G8B8A8)
     defer raylib.UnloadImage(debug)
 
-    screen := raylib.GenImageColor(256, 224, raylib.WHITE)
+    screen := raylib.GenImageColor(512, 224, raylib.WHITE)
     raylib.ImageFormat(&screen, .UNCOMPRESSED_R8G8B8A8)
     defer raylib.UnloadImage(screen)
 
@@ -167,7 +169,7 @@ main :: proc() {
       texture := raylib.LoadTextureFromImage(screen)
       defer raylib.UnloadTexture(texture)
 
-      raylib.DrawTextureEx(texture, {520, 0}, 0, 3, raylib.WHITE)
+      raylib.DrawTexturePro(texture, {0, 0, cast(f32)bus.vdc.out_width, 224}, {520, 0, 256*3, 224*3}, {}, 0, raylib.WHITE)
       raylib.DrawTextEx(
         font,
         fmt.caprintf("CYC/SEC: %v\nCHAN: %v\nFPS: %v\nFRAME: %v\nTIME: %v", cyc_diff*60, channel_select, raylib.GetFPS(), frame, diff, allocator = context.temp_allocator),
