@@ -83,7 +83,7 @@ main :: proc() {
   } else {
     raylib.SetTraceLogLevel(.ERROR)
 
-    raylib.InitWindow(256*3+520, 224*3, "pcPÒW")
+    raylib.InitWindow(256*3+520, 242*3, "pcPÒW")
     defer raylib.CloseWindow()
 
     raylib.InitAudioDevice()
@@ -101,7 +101,7 @@ main :: proc() {
     raylib.ImageFormat(&debug, .UNCOMPRESSED_R8G8B8A8)
     defer raylib.UnloadImage(debug)
 
-    screen := raylib.GenImageColor(256, 224, raylib.WHITE)
+    screen := raylib.GenImageColor(256, 242, raylib.WHITE)
     raylib.ImageFormat(&screen, .UNCOMPRESSED_R8G8B8A8)
     defer raylib.UnloadImage(screen)
 

@@ -28,7 +28,7 @@ Bus :: struct {
   timer: Timer,
 
   vblank_occured: bool,
-  screen: [256*224]RGB333,
+  screen: [256*242]RGB333,
   hucard_map: [0x80]u32,
   
   psg: PSG,
@@ -43,7 +43,7 @@ rom_read :: proc(hucard_map: [0x80]u32, rom: []u8, addr: u32) -> u8 {
   return rom[real_addr]
 }
 
-bus_create :: proc(rom: []u8) -> Bus {
+bus_create :: proc(rom: []u8) -> (bus: Bus) {
   // thanks to https://github.com/pce-devel/Etripator for reference
 
   hucard_map := [0x80]u32{}
@@ -57,10 +57,14 @@ bus_create :: proc(rom: []u8) -> Bus {
     for i in 0..<u32(0x80) do hucard_map[i] = (i%(cast(u32)len(rom)>>BANK_SHIFT))*0x2000
   }
 
-  return Bus{
+  bus = {
     rom = rom,
     hucard_map = hucard_map,
   }
+  
+  vdc_init(&bus.vdc)
+  
+  return
 }
 
 bus_read_u8 :: proc(bus: ^Bus, addr: u32) -> u8 {
@@ -100,4 +104,3 @@ bus_irq :: proc(bus: ^Bus, irq: IRQ) {
     bus.irq_pending |= transmute(IRQ_Reg)bit
   }
 }
-

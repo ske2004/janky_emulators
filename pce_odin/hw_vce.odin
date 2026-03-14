@@ -1,7 +1,5 @@
 package main
 
-import "core:fmt"
-
 RGB333 :: bit_field u16 {
   b: uint | 3,
   r: uint | 3,

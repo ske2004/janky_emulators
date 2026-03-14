@@ -1,6 +1,7 @@
 package main
 
 import "core:log"
+import "core:fmt"
 import "core:container/small_array"
 
 VDC_Reg :: enum {
@@ -51,6 +52,32 @@ VRAM_Sprite :: struct #packed {
   flags: VRAM_Sprite_Flags,
 }
 
+VDC_NTSC_Regs :: struct {
+	hsync: bit_field u16 {
+		width: uint | 5,
+		_:     uint | 3,
+	  start: uint | 7,
+		_:     uint | 1,
+	},
+	hdisp: bit_field u16 {
+		width: uint | 7,
+		_:     uint | 1,
+	  end:   uint | 7,
+		_:     uint | 1,
+	},
+	vsync: bit_field u16 {
+		width: uint | 5,
+		_:     uint | 3,
+	  start: uint | 8,
+	},
+	vdisp: bit_field u16 {
+		width: uint | 9,
+	},
+	vend: bit_field u16 {
+		end:   uint | 8,
+	}
+}
+
 VDC_Status :: bit_field u8 {
   spr_coll_happen:  bool | 1,
   spr_ovfw_happen:  bool | 1,
@@ -87,7 +114,8 @@ VDC_DMA_Ctrl :: bit_field u16 {
 }
 
 VDC_Mwr :: bit_field u16 {
-  padding0:  uint | 4,
+	vm:        uint | 2,
+	sm:        uint | 2,
   tmap_size: uint | 3,
 }
 
@@ -124,6 +152,9 @@ VDC :: struct {
   dmalen: u16,
   dmaspr: u16, // satb source addr
   mwr: VDC_Mwr,
+  ntsc: VDC_NTSC_Regs,
+  
+  burst_mode: bool,
 
   satb_dma_next_vblank: bool,
 
@@ -137,6 +168,14 @@ VDC :: struct {
   
   x, y: int,
   tx, ty: u16,
+}
+
+get_trim_area :: proc(vdc: ^VDC) -> (start_y: uint, end_y: uint) {
+	start_y = 241-vdc.ntsc.vdisp.width+vdc.ntsc.vend.end-vdc.ntsc.vsync.start
+	end_y = start_y+vdc.ntsc.vdisp.width
+	// fmt.printf("trim area: %d-%d\n", start_y, end_y)
+	
+	return
 }
 
 vram_sprite_dims :: proc(spr: VRAM_Sprite) -> (uint, uint) {
@@ -258,9 +297,18 @@ vdc_draw_tilemap_contents :: proc(bus: ^Bus, vdc: ^VDC, dest: []RGB333, dest_w, 
 }
 
 vdc_draw_scanline :: proc(bus: ^Bus, vdc: ^VDC, y: int) {
-
+	vdc.burst_mode = !vdc.cr.spr_enable && !vdc.cr.bkg_enable
+	
+	start_y, end_y := get_trim_area(vdc)
+	is_overflow := y < int(start_y)
+	palette_idx := is_overflow ? 0x100 : 0
+	
   for i in 0..<256 {
-    bus.screen[i+y*256] = bus.vce.pal[0]
+    bus.screen[i+y*256] = bus.vce.pal[palette_idx]
+  }
+  
+  if is_overflow {
+    return
   }
   
   if vdc.cr.spr_enable {
@@ -280,12 +328,11 @@ vdc_draw_scanline :: proc(bus: ^Bus, vdc: ^VDC, y: int) {
 		draw_sprite_strip(bus, vdc, small_array.slice(&sprites), y)
 	}
 
-  
   if vdc.cr.bkg_enable {
     for x in 0..<uint(256) {
       if color, ok := vdc_sample_tile(bus, vdc, cast(uint)vdc.tx+x, cast(uint)vdc.ty).?; ok {
       	index := x+uint(y)*256
-      	if !bus.screen[index].l {
+      	if y < 242 && !bus.screen[index].l {
       		bus.screen[index] = color
       	}
       }
@@ -293,11 +340,22 @@ vdc_draw_scanline :: proc(bus: ^Bus, vdc: ^VDC, y: int) {
   }
 }
 
+vdc_init :: proc(vdc: ^VDC) {
+  vdc.ntsc = {
+  	hsync = {width = 2,  start = 2 },
+    hdisp = {width = 31, end   = 3 },
+    vsync = {width = 2,  start = 15},
+    vdisp = {width = 239},
+    vend  = {end = 3},
+  }
+}
+
 vdc_cyc := 0
 
 vdc_cycle :: proc(bus: ^Bus, vdc: ^VDC) {
   vdc_cyc += 3
-
+	start_y, end_y := get_trim_area(vdc)
+	
   // TODO: temporary
   if vdc_cyc >= 4 {
     vdc_cyc -= 4
@@ -361,7 +419,7 @@ vdc_cycle :: proc(bus: ^Bus, vdc: ^VDC) {
     }
     vdc.x += 1
     if vdc.x == 65 {
-	    if vdc.y < 224 {
+	    if vdc.y < 242 {
 	      vdc_draw_scanline(bus, vdc, vdc.y)
 	    }
     }
@@ -377,7 +435,7 @@ vdc_cycle :: proc(bus: ^Bus, vdc: ^VDC) {
 
 	    if vdc.y == 262 {
 	      vdc.y = 0
-	      vdc.ty = vdc.scroll_y
+	      vdc.ty = vdc.scroll_y-cast(u16)start_y
 	      bus.vblank_occured = true
 	    }
     }
@@ -386,7 +444,8 @@ vdc_cycle :: proc(bus: ^Bus, vdc: ^VDC) {
 
 vdc_write_reg :: proc(vdc: ^VDC, reg: VDC_Reg, val: u16) {
   log_instr_info("vdc write reg: %v %04X", reg, val)
-
+  start_y, end_y := get_trim_area(vdc)
+	
   switch reg {
   case .Mawr: vdc.mawr = val&0x7FFF
   case .Marr: vdc.marr = val&0x7FFF
@@ -395,10 +454,13 @@ vdc_write_reg :: proc(vdc: ^VDC, reg: VDC_Reg, val: u16) {
   case .Cr: vdc.cr = cast(VDC_Cr)val
   case .Rcr: vdc.rcr = val&0x3FF
   case .Scrollx: vdc.scroll_x = val&0x3FF
-  case .Scrolly: vdc.scroll_y = val&0x1FF; vdc.ty = vdc.scroll_y
+  case .Scrolly: vdc.scroll_y = val&0x1FF; vdc.ty = vdc.scroll_y-cast(u16)start_y
   case .Mwr:  vdc.mwr = cast(VDC_Mwr)val
-  case .Hsync, .Hdisp, .Vsync, .Vdisp, .Vend:
-    log.warnf("todo: vdc sync register write")
+  case .Hsync: vdc.ntsc.hsync = cast(type_of(vdc.ntsc.hsync))val; fmt.printf("VDC: Hsync write: %v\n", vdc.ntsc.hsync)
+  case .Hdisp: vdc.ntsc.hdisp = cast(type_of(vdc.ntsc.hdisp))val; fmt.printf("VDC: Hdisp write: %v\n", vdc.ntsc.hdisp)
+  case .Vsync: vdc.ntsc.vsync = cast(type_of(vdc.ntsc.vsync))val; fmt.printf("VDC: Vsync write: %v\n", vdc.ntsc.vsync)
+  case .Vdisp: vdc.ntsc.vdisp = cast(type_of(vdc.ntsc.vdisp))val; fmt.printf("VDC: Vdisp write: %v\n", vdc.ntsc.vdisp)
+  case .Vend:  vdc.ntsc.vend = cast(type_of(vdc.ntsc.vend))val;   fmt.printf("VDC: Vend write: %v\n", vdc.ntsc.vend)
   case .DMActrl: vdc.dmactrl = cast(VDC_DMA_Ctrl)val
   case .DMAsrc: vdc.dmasrc = val&0x7FFF
   case .DMAdst: vdc.dmadst = val&0x7FFF
@@ -418,8 +480,11 @@ vdc_read_reg :: proc(vdc: ^VDC, reg: VDC_Reg) -> (ret: u16) {
   case .Scrollx: ret = cast(u16)vdc.scroll_x
   case .Scrolly: ret = cast(u16)vdc.scroll_y
   case .Mwr:     ret = cast(u16)vdc.mwr
-  case .Hsync, .Hdisp, .Vsync, .Vdisp, .Vend:
-    log.warnf("todo: vdc sync register read")
+  case .Hsync:   ret = cast(u16)vdc.ntsc.hsync
+  case .Hdisp:   ret = cast(u16)vdc.ntsc.hdisp
+  case .Vsync:   ret = cast(u16)vdc.ntsc.vsync
+  case .Vdisp:   ret = cast(u16)vdc.ntsc.vdisp
+  case .Vend:    ret = cast(u16)vdc.ntsc.vend
   case .DMActrl: ret = cast(u16)vdc.dmactrl
   case .DMAsrc:  ret = vdc.dmasrc
   case .DMAdst:  ret = vdc.dmadst
