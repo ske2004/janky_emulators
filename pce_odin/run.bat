@@ -1,7 +1,7 @@
 @echo off
 
 rem set ROM_NAME="P:\ROMS\Bonk's Adventure (USA).pce"
-set ROM_NAME="P:\ROMS\Bomberman (Japan).pce"
+rem set ROM_NAME="P:\ROMS\Bomberman (Japan).pce"
 rem set ROM_NAME="P:\ROMS\Bikkuriman World (Japan).pce"
 rem set ROM_NAME="P:\ROMS\Magical Chase (Japan).pce"
 rem set ROM_NAME="P:\ROMS\Shanghai (Japan).pce"
@@ -15,7 +15,7 @@ rem set ROM_NAME="P:\ROMS\PCE\Super Mario Bros. (World) (v0.21) (Proto) (Afterma
 rem set ROM_NAME="P:\ROMS\PCE\DuckTales 2 (World) (v0.31) (Proto) (Aftermarket) (Unl).pce"
 rem set ROM_NAME="P:\ROMS\PCE\Contra (World) (v0.35) (Proto) (Aftermarket) (Unl).pce"
 rem set ROM_NAME="P:\ROMS\PCE\Castlevania (World) (v0.44) (Proto) (Aftermarket) (Unl).pce"
-rem set ROM_NAME="P:\ROMS\PCE\After Burner II (Japan) (En).pce"
+set ROM_NAME="P:\ROMS\PCE\After Burner II (Japan) (En).pce"
 
 if "%1" == "prof" (
   odin run . -linker:radlink -o:speed -no-bounds-check -define:ENABLE_SPALL=true -debug -- %ROM_NAME%

@@ -11,9 +11,16 @@ PSG_Balance :: bit_field u8 {
   left:  uint | 4,
 }
 
+PSG_LFO_Ctrl :: enum {
+	No_Modulate,  // unchanged
+	Add,          // added
+	S4Add,        // shift 4 left, add
+	S8Add,        // shift 8 left, add
+}
+
 PSG_LFO_Flags :: bit_field u8 {
-  ctrl:    bool | 1,
-  unused:  u8   | 6,
+  ctrl:    PSG_LFO_Ctrl | 2,
+  unused:  u8   | 5,
   trigger: bool | 1,
 }
 
@@ -94,6 +101,30 @@ psg_get_chan :: proc(psg: ^PSG) -> ^PSG_Chan {
   return &psg.channels[psg.chan_selected]
 }
 
+psg_cycle_mod :: proc(psg: ^PSG, chan: ^PSG_Chan) {
+	t := chan.freq*cast(uint)psg.lfo_freq
+  if t != 0 && psg.cycles%t == 0 {
+  	ModulateValue :: bit_field u8 {
+ 			value: int | 5 
+    }
+    
+  	modulate_by := (cast(ModulateValue)chan.samples[chan.sample_idx]).value
+   	chan0 := psg.channels[0]
+   
+   	switch psg.lfo_flags.ctrl {
+    case .No_Modulate: 
+    case .Add:   chan0.freq = cast(uint)(cast(int)chan0.freq + modulate_by)
+    case .S4Add: chan0.freq = cast(uint)(cast(int)chan0.freq + (modulate_by<<4))
+    case .S8Add: chan0.freq = cast(uint)(cast(int)chan0.freq + (modulate_by<<8))
+    }
+    
+    chan0.freq &= 0xFFF
+  
+    chan.sample_idx += 1
+    chan.sample_idx %= 32
+  }
+}
+
 psg_cycle_chan :: proc(psg: ^PSG, chan: ^PSG_Chan) {
   if chan.noise.on {
     t := (chan.noise.freq~0x1F)
@@ -151,6 +182,10 @@ psg_flush :: proc(psg: ^PSG, buf_out: []f32) {
 psg_read_sample :: proc(bus: ^Bus, psg: ^PSG, chan: uint) -> (l: f32, r: f32) {
   if chan == 0 {
     for chan, i in psg.channels {
+    	if i == 1 && psg.lfo_flags.trigger {
+  			continue
+      }
+      
       lt, rt := psg_chan_mix(bus, psg, uint(i))
       l += lt
       r += rt
@@ -178,8 +213,12 @@ psg_cycle :: proc(bus: ^Bus, psg: ^PSG) {
   for psg_cyc >= 6 {
     psg_cyc -= 6
 
-    for &chan in psg.channels {
-      psg_cycle_chan(psg, &chan)
+    for &chan, i in psg.channels {
+    	if psg.lfo_flags.trigger && i == 1 {
+   			psg_cycle_mod(psg, &chan)
+      } else {
+	      psg_cycle_chan(psg, &chan)
+      }
     }
 
     if psg.cycles >= psg.dac_start + CPS {
@@ -238,7 +277,12 @@ psg_write :: proc(bus: ^Bus, psg: ^PSG, adr: PSG_Addrs, val: u8) {
     if chan != nil && (psg.chan_selected == 4 || psg.chan_selected == 5) {
       chan.noise = cast(PSG_Chan_Noise)val
     }
-  case .Modulate_Freq: psg.lfo_freq = val
-  case .Modulate_Flags: psg.lfo_flags = cast(PSG_LFO_Flags)val
+  case .Modulate_Freq:
+  	psg.lfo_freq = val
+  case .Modulate_Flags:
+  	psg.lfo_flags = cast(PSG_LFO_Flags)val
+   	if psg.lfo_flags.trigger {
+    	psg.channels[1].sample_idx = 0
+    }
   }
 }

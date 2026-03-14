@@ -375,7 +375,7 @@ vdc_cycle :: proc(bus: ^Bus, vdc: ^VDC) {
 	    vdc.y += 1
 			vdc.ty += 1
 
-	    if vdc.y == 261 {
+	    if vdc.y == 262 {
 	      vdc.y = 0
 	      vdc.ty = vdc.scroll_y
 	      bus.vblank_occured = true
