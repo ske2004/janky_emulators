@@ -29,7 +29,7 @@ joy_read :: proc(joy: ^Joy) -> u8 {
     }
   }
 
-  return 0
+  return 0x0F
 }
 
 joy_write :: proc(joy: ^Joy, val: u8) {
