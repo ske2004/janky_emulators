@@ -127,7 +127,7 @@ psg_cycle_mod :: proc(psg: ^PSG, chan: ^PSG_Chan) {
 
 psg_cycle_chan :: proc(psg: ^PSG, chan: ^PSG_Chan) {
   if chan.noise.on {
-    t := (chan.noise.freq~0x1F)
+    t := (chan.noise.freq~0x1F)+1
     if t != 0 && psg.cycles%t == 0 {
       if chan.sample_idx == 0 {
         chan._noise_state = cast(u8)(rand.uint_max(2, rand.xoshiro256_random_generator(&psg.rng)))*31
@@ -137,7 +137,8 @@ psg_cycle_chan :: proc(psg: ^PSG, chan: ^PSG_Chan) {
     }
   } else {
     t := chan.freq
-    if t != 0 && psg.cycles%t == 0 {
+    // should be != 0, but frequency of 1 creates an awful high pitched noise
+    if t > 1 && psg.cycles%t == 0 {
       chan.sample_idx += 1
       chan.sample_idx %= 32
     }

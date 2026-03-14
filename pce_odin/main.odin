@@ -163,7 +163,7 @@ main :: proc() {
         pixels[i*4+2] = cast(u8)(v.b*32)
         pixels[i*4+3] = 0xFF
       }
-
+      
       texture := raylib.LoadTextureFromImage(screen)
       defer raylib.UnloadTexture(texture)
 

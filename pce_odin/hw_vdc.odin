@@ -346,7 +346,7 @@ vdc_cycle :: proc(bus: ^Bus, vdc: ^VDC) {
     }
     
     if vdc.x == 0 {
-	    if vdc.y < 262 && !(vdc.y >= 245 && vdc.y <= 247) && vdc.cr.scanline_int && int(vdc.rcr)-64 == vdc.y {
+	    if vdc.rcr >= 64 && vdc.rcr <= 326 && vdc.y < 262 && !(vdc.y >= 245 && vdc.y <= 247) && vdc.cr.scanline_int && int(vdc.rcr)-64 == vdc.y {
 	      log_instr_info("rcr!")
 	      vdc.status.scanline_happen = true
 	      bus_irq(bus, .IRQ1)
@@ -360,13 +360,13 @@ vdc_cycle :: proc(bus: ^Bus, vdc: ^VDC) {
 	    }
     }
     vdc.x += 1
-    if vdc.x >= 65 && vdc.x <= 65+256 {
-	    vdc.tx += 1
-    }
     if vdc.x == 65 {
 	    if vdc.y < 224 {
 	      vdc_draw_scanline(bus, vdc, vdc.y)
 	    }
+    }
+    if vdc.x >= 65 && vdc.x <= 65+256 {
+	    vdc.tx += 1
     }
     if vdc.x == 341 {
       vdc.x = 0
@@ -394,7 +394,7 @@ vdc_write_reg :: proc(vdc: ^VDC, reg: VDC_Reg, val: u16) {
   case .Unused0, .Unused1:
   case .Cr: vdc.cr = cast(VDC_Cr)val
   case .Rcr: vdc.rcr = val&0x3FF
-  case .Scrollx: vdc.scroll_x = val&0x3FF; vdc.tx = vdc.scroll_x
+  case .Scrollx: vdc.scroll_x = val&0x3FF
   case .Scrolly: vdc.scroll_y = val&0x1FF; vdc.ty = vdc.scroll_y
   case .Mwr:  vdc.mwr = cast(VDC_Mwr)val
   case .Hsync, .Hdisp, .Vsync, .Vdisp, .Vend:
